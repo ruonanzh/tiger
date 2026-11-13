@@ -22,3 +22,23 @@ test-faith-block-trigger.0002 = {
 		}
 	}
 }
+
+# `culture = { ... }` is a scope drill too.
+test-faith-block-trigger.0003 = {
+	hidden = yes
+	trigger = {
+		any_ruler = {
+			culture = { bogus_culture_trigger = yes }
+		}
+	}
+}
+
+# `government_type = { ... }` is a scope drill too.
+test-faith-block-trigger.0004 = {
+	hidden = yes
+	trigger = {
+		any_ruler = {
+			government_type = { bogus_government_type_trigger = yes }
+		}
+	}
+}

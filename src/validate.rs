@@ -2,7 +2,7 @@
 
 use std::fmt::{Display, Formatter};
 
-use crate::block::{BV, Block, Comparator, Eq};
+use crate::block::{BV, Block, Comparator, Eq, Field};
 #[cfg(feature = "ck3")]
 use crate::ck3::tables::misc::OUTBREAK_INTENSITIES;
 #[cfg(feature = "ck3")]
@@ -470,6 +470,55 @@ pub fn validate_iterator_fields(
     }
 }
 
+/// The `faith`, `culture` and `government_type` fields of the character iterators are filters,
+/// but in a trigger `faith = { ... }` is a scope drill into the faith scope, just like `faith`
+/// is outside iterators. This accepts the block form as such a drill, and leaves the value form
+/// (`faith = faith:foo`) to [`Validator::field_target`].
+///
+/// Only the block form is intercepted, because the value form must keep the rules that a trigger
+/// block gives it: a case-insensitive key match and allowed macro injection.
+fn field_target_or_scope_drill(
+    vd: &mut Validator,
+    block: &Block,
+    listtype: ListType,
+    name: &str,
+    sc: &mut ScopeContext,
+    outscopes: Scopes,
+    tooltipped: Tooltipped,
+) {
+    if listtype.is_for_triggers() {
+        // A trigger block matches its keys case-insensitively, so look the key up as written.
+        for Field(key, _, bv) in block.iter_fields() {
+            if let BV::Block(_) = bv
+                && key.lowercase_is(name)
+            {
+                let max_sev = vd.max_severity();
+                vd.field_validated_key(key.as_str(), |key, bv, data| match bv {
+                    BV::Value(token) => {
+                        validate_target(token, data, sc, outscopes);
+                    }
+                    BV::Block(_) => {
+                        sc.open_builder();
+                        sc.replace(outscopes, key.clone());
+                        validate_trigger_rhs(
+                            key,
+                            Comparator::Equals(Eq::Single),
+                            bv,
+                            data,
+                            sc,
+                            tooltipped,
+                            false,
+                            max_sev,
+                        );
+                    }
+                });
+                return;
+            }
+        }
+    }
+    vd.field_target(name, sc, outscopes);
+}
+
 /// This checks the special fields for certain iterators, like `type =` in `every_relation`.
 /// It doesn't check the generic ones like `limit` or the ordering ones for `ordered_*`.
 #[allow(unused_variables)] // vic3 does not use `tooltipped`
@@ -644,36 +693,35 @@ pub fn validate_inside_iterator(
 
         if name == "ruler" {
             // TODO: if an iterator has a limit checking one of these, suggest using the filter.
-            vd.field_target("government_type", sc, Scopes::GovernmentType);
+            field_target_or_scope_drill(
+                vd,
+                block,
+                listtype,
+                "government_type",
+                sc,
+                Scopes::GovernmentType,
+                tooltipped,
+            );
             vd.field_bool("only_independent");
             vd.field_choice("tier", &["county", "duchy", "kingdom", "empire", "hegemony"]);
-            // `faith = faith:foo` is a filter here, but in a trigger `faith = { ... }` is a
-            // scope drill into the faith scope, just like `faith` outside iterators.
-            if listtype.is_for_triggers() {
-                let max_sev = vd.max_severity();
-                vd.field_validated_key("faith", |key, bv, data| match bv {
-                    BV::Value(token) => {
-                        validate_target(token, data, sc, Scopes::Faith);
-                    }
-                    BV::Block(_) => {
-                        sc.open_builder();
-                        sc.replace(Scopes::Faith, key.clone());
-                        validate_trigger_rhs(
-                            key,
-                            Comparator::Equals(Eq::Single),
-                            bv,
-                            data,
-                            sc,
-                            tooltipped,
-                            false,
-                            max_sev,
-                        );
-                    }
-                });
-            } else {
-                vd.field_target("faith", sc, Scopes::Faith);
-            }
-            vd.field_target("culture", sc, Scopes::Culture);
+            field_target_or_scope_drill(
+                vd,
+                block,
+                listtype,
+                "faith",
+                sc,
+                Scopes::Faith,
+                tooltipped,
+            );
+            field_target_or_scope_drill(
+                vd,
+                block,
+                listtype,
+                "culture",
+                sc,
+                Scopes::Culture,
+                tooltipped,
+            );
             // The docs list these names in the filter descriptions but the plain ones above in
             // their usage example. Vanilla 1.20 uses `faith_filter`.
             vd.field_target("government_type_filter", sc, Scopes::GovernmentType);

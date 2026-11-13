@@ -279,13 +279,48 @@ fn test_faith_block_trigger() {
 
     let events = "events/test-faith-block-trigger.txt";
 
-    // `faith = { ... }` in a trigger is a scope drill into the faith scope.
+    // `faith = { ... }`, `culture = { ... }` and `government_type = { ... }` in a trigger are
+    // scope drills into those scopes.
     let report = take_report(&mut reports, events, "expected value, found block");
     assert!(dbg!(report).is_none(), "faith = {{ ... }} should be accepted in a trigger");
 
-    // The body of the scope drill must still be validated, in the faith scope.
+    // The body of a scope drill must still be validated, in the drilled-into scope.
     let report = take_report(&mut reports, events, "unknown token `bogus_trigger_in_faith_scope`");
     report.expect("unknown token in faith scope body");
+    let report = take_report(&mut reports, events, "unknown token `bogus_culture_trigger`");
+    report.expect("unknown token in culture scope body");
+    let report = take_report(&mut reports, events, "unknown token `bogus_government_type_trigger`");
+    report.expect("unknown token in government_type scope body");
+
+    dbg!(&reports);
+    assert!(reports.is_empty());
+}
+
+#[test]
+fn test_faith_filter_value_path() {
+    let mut reports = check_mod_helper("mod5");
+
+    let events = "events/test-faith-filter.txt";
+
+    // A trigger block matches keys case-insensitively, so `FAITH = faith:catholic` is the same
+    // filter as `faith = faith:catholic`, and the value is checked as a faith target.
+    let report = take_report_contains(&mut reports, events, "unknown field `FAITH`");
+    assert!(dbg!(report).is_none(), "`FAITH` should not be an unknown field");
+    let report = take_report(&mut reports, events, "unknown token `FAITH`");
+    assert!(dbg!(report).is_none(), "`FAITH` should not be an unknown token");
+    let report = take_report(
+        &mut reports,
+        events,
+        "faith catholic not defined in common/religion/faith_types/",
+    );
+    report.expect("`FAITH = faith:catholic` value should be validated as a faith target");
+
+    // The filter value is validated like any other target, which includes the checks that the
+    // lowercase spelling of the key gets.
+    let report = take_report(&mut reports, events, "target `this` makes no sense here");
+    report.expect("`FAITH = this` should be checked as a normal target");
+    let report = take_report(&mut reports, events, "`this` produces character but expected faith");
+    report.expect("`FAITH = this` should be checked against the faith scope");
 
     dbg!(&reports);
     assert!(reports.is_empty());

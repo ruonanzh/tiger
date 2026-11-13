@@ -1,0 +1,24 @@
+﻿namespace = test-faith-filter
+
+# A trigger block matches its keys case-insensitively, so this is the `faith` filter and
+# the value is checked as a faith target.
+test-faith-filter.0001 = {
+	hidden = yes
+
+	trigger = {
+		any_ruler = {
+			FAITH = faith:catholic
+		}
+	}
+}
+
+# The filter value gets the same checks as for the lowercase spelling of the key.
+test-faith-filter.0002 = {
+	hidden = yes
+
+	trigger = {
+		any_ruler = {
+			FAITH = this
+		}
+	}
+}
