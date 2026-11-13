@@ -272,3 +272,20 @@ fn test_mod3() {
     dbg!(&reports);
     assert!(reports.is_empty());
 }
+
+#[test]
+fn test_scripted_gui_scope_none() {
+    let mut reports = check_mod_helper("mod4");
+
+    let gui = "gui/test-scripted-guis.gui";
+
+    // A scripted gui declared with `scope = none` has no root scope, so its datafunction chain
+    // may start with GuiScope.AddScope instead of GuiScope.SetRoot. The scope=none call on line 2
+    // must not be reported; the call on line 3 declares a scope and still needs the root.
+    let report = take_report(&mut reports, gui, "expected SetRoot");
+    let report = report.expect("declared scope still requires GuiScope.SetRoot");
+    assert_eq!(report.1[0].loc.line, 3);
+
+    dbg!(&reports);
+    assert!(reports.is_empty());
+}

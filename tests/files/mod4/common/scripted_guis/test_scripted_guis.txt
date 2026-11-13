@@ -1,0 +1,11 @@
+﻿test_gui_scope_none = {
+	scope = none
+	effect = {
+	}
+}
+
+test_gui_scope_character = {
+	scope = character
+	effect = {
+	}
+}

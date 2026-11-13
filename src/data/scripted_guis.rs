@@ -100,16 +100,24 @@ impl ScriptedGui {
                 && chain.codes[0].name.is("GreatHolyWarWindow")
                 && chain.codes[1].name.is("GetScope");
 
+            // A scripted gui declared with `scope = none` has no root scope, so its chain may
+            // start with GuiScope.AddScope instead of GuiScope.SetRoot.
+            let no_root = block
+                .get_field_value("scope")
+                .and_then(|token| Scopes::from_snake_case(token.as_str()))
+                .is_some_and(|declared_scope| declared_scope == Scopes::None)
+                && chain.codes[1].name.is("AddScope");
+
             if !ghw {
                 if !chain.codes[0].name.is("GuiScope") {
                     warn(ErrorKey::Gui).msg("expected GuiScope").loc(&chain.codes[0].name).push();
                     return;
                 }
-                if !chain.codes[1].name.is("SetRoot") {
+                if !no_root && !chain.codes[1].name.is("SetRoot") {
                     warn(ErrorKey::Gui).msg("expected SetRoot").loc(&chain.codes[1].name).push();
                     return;
                 }
-                if chain.codes[1].arguments.len() != 1 {
+                if !no_root && chain.codes[1].arguments.len() != 1 {
                     // The caller already warns about this
                     return;
                 }
@@ -117,6 +125,8 @@ impl ScriptedGui {
             // Get the root scope
             let scope = if ghw {
                 Scopes::Character
+            } else if no_root {
+                Scopes::None
             } else if let CodeArg::Chain(chain) = &chain.codes[1].arguments[0] {
                 deduce_scope(chain, data, context_sc, dc)
             } else {
@@ -141,7 +151,8 @@ impl ScriptedGui {
             }
 
             // Get the additional scopes
-            for code in chain.codes.iter().skip(2) {
+            let first_extra = if no_root { 1 } else { 2 };
+            for code in chain.codes.iter().skip(first_extra) {
                 if code.name.is("AddScope") {
                     if code.arguments.len() != 2 {
                         // The caller already warns about this
