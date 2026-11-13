@@ -1,0 +1,44 @@
+﻿namespace = test-faith-block-trigger
+
+# `faith = { ... }` is a scope drill in a trigger: it scopes into the faith and runs
+# the body as a trigger.
+test-faith-block-trigger.0001 = {
+	hidden = yes
+
+	trigger = {
+		any_ruler = {
+			faith = { is_dead_faith = yes }
+		}
+	}
+}
+
+# The body of the scope drill is still validated, in the faith scope.
+test-faith-block-trigger.0002 = {
+	hidden = yes
+
+	trigger = {
+		any_ruler = {
+			faith = { bogus_trigger_in_faith_scope = yes }
+		}
+	}
+}
+
+# `culture = { ... }` is a scope drill too.
+test-faith-block-trigger.0003 = {
+	hidden = yes
+	trigger = {
+		any_ruler = {
+			culture = { bogus_culture_trigger = yes }
+		}
+	}
+}
+
+# `government_type = { ... }` is a scope drill too.
+test-faith-block-trigger.0004 = {
+	hidden = yes
+	trigger = {
+		any_ruler = {
+			government_type = { bogus_government_type_trigger = yes }
+		}
+	}
+}
