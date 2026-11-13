@@ -1,0 +1,5 @@
+test_old_target_filter = {
+    hidden = yes
+    target_type = artifact
+    target_filter = recipient_artifacts
+}

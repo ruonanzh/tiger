@@ -369,7 +369,7 @@ impl DbKind for CharacterInteraction {
                 OLD_TARGET_FILTERS.iter().find(|(old, _, _)| vd.value().is(old))
             {
                 let msg = format!(
-                    "should use `target_filter = {filter}` with `target_source = {source}` instead of `{}`",
+                    "the docs suggest `target_filter = {filter}` with `target_source = {source}`; `{}` still works",
                     vd.value()
                 );
                 warn(ErrorKey::Deprecated).msg(msg).loc(vd.value()).push();
