@@ -1,0 +1,6 @@
+﻿namespace = dup_self
+
+# Mod + mod definition of the same event: a silent self-overwrite, so this stays a warning.
+dup_self.0001 = {
+	hidden = yes
+}

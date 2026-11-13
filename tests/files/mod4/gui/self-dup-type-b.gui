@@ -1,0 +1,9 @@
+# Mod + mod definition of the same gui type: the earlier one wins, so this whole block is dropped
+# and the duplicate has to stay a warning.
+types DupOriginTypes {
+	type
+	dup_origin_type = widget
+	{
+		name = "dup_origin_type"
+	}
+}

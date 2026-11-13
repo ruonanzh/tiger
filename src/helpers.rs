@@ -33,8 +33,37 @@ pub enum AllowInject {
     Yes,
 }
 
-/// Warns about a redefinition of a database item
+/// Reports a redefinition of a database item.
+///
+/// About twenty call sites check `other.key.loc.kind >= key.loc.kind` (some check `==`) before
+/// calling this, and then a mod overriding a vanilla item never reaches this function at all. The
+/// tip below is only reachable at the remaining call sites, which have no such check (events,
+/// genes), so do not assume that every item kind behaves alike.
+///
+/// Where a vanilla definition and a mod definition do meet, the mod is deliberately overriding the
+/// vanilla item, so the report is only a tip. In every other case one definition silently
+/// overwrites another one, and that stays a warning.
+///
+/// Call sites that keep the earlier definition and drop the later one use [`dup_error_discarded`],
+/// because there the dropped definition is the problem.
 pub fn dup_error(key: &Token, other: &Token, id: &str) {
+    let report = if key.loc.kind.counts_as_vanilla() == other.loc.kind.counts_as_vanilla() {
+        warn(ErrorKey::DuplicateItem)
+    } else {
+        tips(ErrorKey::DuplicateItem)
+    };
+    report
+        .msg(format!("{id} is redefined by another {id}"))
+        .loc(other)
+        .loc_msg(key, format!("the other {id} is here"))
+        .push();
+}
+
+/// Reports a redefinition where the earlier definition wins and `other` is dropped.
+///
+/// Always a warning, even when one of the two definitions is vanilla, because the dropped
+/// definition is silently lost. `key` is the definition that was kept, `other` the one that lost.
+pub fn dup_error_discarded(key: &Token, other: &Token, id: &str) {
     warn(ErrorKey::DuplicateItem)
         .msg(format!("{id} is redefined by another {id}"))
         .loc(other)

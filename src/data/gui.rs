@@ -10,7 +10,7 @@ use crate::everything::Everything;
 use crate::fileset::{FileEntry, FileHandler};
 use crate::game::Game;
 use crate::gui::{BuiltinWidget, GuiBlock, GuiBlockFrom};
-use crate::helpers::{TigerHashMap, TigerHashSet, dup_error};
+use crate::helpers::{TigerHashMap, TigerHashSet, dup_error, dup_error_discarded};
 use crate::item::Item;
 use crate::lowercase::Lowercase;
 use crate::parse::ParserMemory;
@@ -138,10 +138,10 @@ impl Gui {
     pub fn load_type(&mut self, key: Token, base: Token, block: Block) {
         let key_lc = Lowercase::new(key.as_str());
 
-        // With gui types the earlier one takes precedence
+        // With gui types the earlier one takes precedence, so the mod's own block is dropped
         if let Some(other) = self.types.get(&key_lc) {
             if other.key.loc.kind <= key.loc.kind {
-                dup_error(&other.key, &key, "gui type");
+                dup_error_discarded(&other.key, &key, "gui type");
             }
             return;
         }
@@ -149,10 +149,10 @@ impl Gui {
     }
 
     pub fn load_template(&mut self, key: Token, block: Block) {
-        // With gui templates the earlier one takes precedence
+        // With gui templates the earlier one takes precedence, so the mod's own block is dropped
         if let Some(other) = self.templates.get(key.as_str()) {
             if other.key.loc.kind <= key.loc.kind {
-                dup_error(&other.key, &key, "gui template");
+                dup_error_discarded(&other.key, &key, "gui template");
             }
             return;
         }

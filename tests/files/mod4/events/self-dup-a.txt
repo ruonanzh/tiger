@@ -1,0 +1,6 @@
+﻿namespace = dup_self
+
+# First of two definitions of this event inside the mod. See events/self-dup-b.txt.
+dup_self.0001 = {
+	hidden = yes
+}
