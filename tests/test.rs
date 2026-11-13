@@ -272,3 +272,22 @@ fn test_mod3() {
     dbg!(&reports);
     assert!(reports.is_empty());
 }
+
+#[test]
+fn test_old_target_filter_wording() {
+    let mut reports = check_mod_helper("mod4");
+
+    let interactions = "common/character_interactions/old_target_filter.txt";
+    let report = take_report(
+        &mut reports,
+        interactions,
+        "the docs suggest `target_filter = artifacts` with `target_source = recipient`; \
+         `recipient_artifacts` still works",
+    );
+    let report = report.expect("old target_filter wording test");
+    assert_eq!(report.0.severity, tiger_lib::Severity::Warning);
+    ignore_reports(&mut reports, interactions);
+
+    dbg!(&reports);
+    assert!(reports.is_empty());
+}
