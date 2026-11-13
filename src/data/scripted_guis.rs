@@ -35,14 +35,13 @@ impl ScriptedGui {
 impl DbKind for ScriptedGui {
     fn validate(&self, key: &Token, block: &Block, data: &Everything) {
         let mut vd = Validator::new(block, data);
-        let mut sc = ScopeContext::new(Scopes::None, key);
-        if let Some(token) = vd.field_value("scope") {
-            if let Some(scope) = Scopes::from_snake_case(token.as_str()) {
-                sc = ScopeContext::new(scope, token);
-            } else {
-                warn(ErrorKey::Scopes).msg("unknown scope type").loc(token).push();
-            }
+        let scope_token = vd.field_value("scope");
+        if let Some(token) = scope_token
+            && Scopes::from_snake_case(token.as_str()).is_none()
+        {
+            warn(ErrorKey::Scopes).msg("unknown scope type").loc(token).push();
         }
+        let mut sc = ScopeContext::new(declared_scope(block), scope_token.unwrap_or(key));
 
         // TODO: JominiNotification
         vd.field_value("notification_key");
@@ -61,6 +60,16 @@ impl DbKind for ScriptedGui {
         vd.field_trigger("is_valid", Tooltipped::No, &mut sc.clone());
         vd.field_effect("effect", Tooltipped::No, &mut sc.clone());
     }
+}
+
+/// The scope type that the scripted gui declares as its root scope.
+///
+/// A gui that omits the `scope` field has no root scope, just like `scope = none`.
+fn declared_scope(block: &Block) -> Scopes {
+    block
+        .get_field_value("scope")
+        .and_then(|token| Scopes::from_snake_case(token.as_str()))
+        .unwrap_or(Scopes::None)
 }
 
 const KNOWN_SGUICALLS: &[&str] = &[
@@ -102,10 +111,8 @@ impl ScriptedGui {
 
             // A scripted gui declared with `scope = none` has no root scope, so its chain may
             // start with GuiScope.AddScope instead of GuiScope.SetRoot.
-            let no_root = block
-                .get_field_value("scope")
-                .and_then(|token| Scopes::from_snake_case(token.as_str()))
-                .is_some_and(|declared_scope| declared_scope == Scopes::None)
+            let no_root = Game::is_ck3()
+                && declared_scope(block) == Scopes::None
                 && chain.codes[1].name.is("AddScope");
 
             if !ghw {
@@ -135,8 +142,7 @@ impl ScriptedGui {
             };
             // Compare it to the declared root scope of the scripted gui
             if let Some(token) = block.get_field_value("scope")
-                && let Some(declared_scope) = Scopes::from_snake_case(token.as_str())
-                && !scope.intersects(declared_scope)
+                && !scope.intersects(declared_scope(block))
             {
                 warn(ErrorKey::Scopes)
                     .msg("SetRoot scope does not match scripted gui scope")

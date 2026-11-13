@@ -280,8 +280,10 @@ fn test_scripted_gui_scope_none() {
     let gui = "gui/test-scripted-guis.gui";
 
     // A scripted gui declared with `scope = none` has no root scope, so its datafunction chain
-    // may start with GuiScope.AddScope instead of GuiScope.SetRoot. The scope=none call on line 2
-    // must not be reported; the call on line 3 declares a scope and still needs the root.
+    // may start with GuiScope.AddScope instead of GuiScope.SetRoot. The scope=none calls on lines 2
+    // and 4 must not be reported; the call on line 3 declares a scope and still needs the root.
+    // The scope=none gui uses `scope:owner` in its is_valid, so this also checks that the
+    // AddScope at the start of the chain is processed and not skipped.
     let report = take_report(&mut reports, gui, "expected SetRoot");
     let report = report.expect("declared scope still requires GuiScope.SetRoot");
     assert_eq!(report.1[0].loc.line, 3);

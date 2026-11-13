@@ -1,5 +1,10 @@
 ﻿test_gui_scope_none = {
 	scope = none
+	is_valid = {
+		# `owner` comes from the GuiScope.AddScope that replaces GuiScope.SetRoot in the gui
+		# call. If that AddScope is skipped, tiger warns that scope:owner might not be available.
+		scope:owner.age > 10
+	}
 	effect = {
 	}
 }

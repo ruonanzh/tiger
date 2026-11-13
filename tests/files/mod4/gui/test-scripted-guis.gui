@@ -1,4 +1,5 @@
 container = {
     onclick = "[GetScriptedGui('test_gui_scope_none').Execute(GuiScope.AddScope('owner', GetPlayer.MakeScope).End)]"
     onclick = "[GetScriptedGui('test_gui_scope_character').Execute(GuiScope.AddScope('owner', GetPlayer.MakeScope).End)]"
+    onclick = "[GetScriptedGui('test_gui_scope_none').IsValidTooltip(GuiScope.AddScope('owner', GetPlayer.MakeScope).End)]"
 }
