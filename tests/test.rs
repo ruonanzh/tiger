@@ -2,7 +2,8 @@ use std::path::PathBuf;
 use std::sync::{LazyLock, Mutex};
 
 use tiger_lib::{
-    Everything, LogReportMetadata, LogReportPointers, TigerHashMap, TigerHashSet, take_reports,
+    Confidence, Everything, LogReportMetadata, LogReportPointers, Severity, TigerHashMap,
+    TigerHashSet, take_reports,
 };
 
 static TEST_MUTEX: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
@@ -269,6 +270,28 @@ fn test_mod3() {
     report.expect("unmatched quote format string gui test");
     ignore_reports(&mut reports, gui_unmatched_format);
 
+    dbg!(&reports);
+    assert!(reports.is_empty());
+}
+
+#[test]
+fn test_mod_or_single() {
+    let mut reports = check_mod_helper("mod_or_single");
+
+    let on_actions = "common/on_action/test-single-item-or.txt";
+    let report = take_report(&mut reports, on_actions, "OR with only one item inside is useless");
+    let report = report.expect("single-item OR test");
+    assert_eq!(
+        report.0.severity,
+        Severity::Tips,
+        "a single-item OR should be a tip, not a warning"
+    );
+    assert_ne!(report.0.severity, Severity::Warning, "a single-item OR should not be a warning");
+    assert_eq!(
+        report.0.confidence,
+        Confidence::Reasonable,
+        "a single-item OR tip should be stated with the usual confidence"
+    );
     dbg!(&reports);
     assert!(reports.is_empty());
 }
