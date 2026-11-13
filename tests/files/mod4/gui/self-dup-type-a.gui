@@ -1,0 +1,8 @@
+# First of two definitions of this gui type inside the mod. See gui/self-dup-type-b.gui.
+types DupOriginTypes {
+	type
+	dup_origin_type = widget
+	{
+		name = "dup_origin_type"
+	}
+}

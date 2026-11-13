@@ -11,7 +11,7 @@ use crate::data::scripted_triggers::Trigger;
 use crate::everything::Everything;
 use crate::fileset::{FileEntry, FileHandler};
 use crate::game::Game;
-use crate::helpers::{TigerHashMap, TigerHashSet, dup_error};
+use crate::helpers::{TigerHashMap, TigerHashSet, dup_error, dup_error_discarded};
 use crate::item::Item;
 use crate::parse::ParserMemory;
 use crate::pathtable::PathTableIndex;
@@ -42,8 +42,9 @@ impl Events {
                 if Game::is_vic3() {
                     // Earlier events override later ones in vic3.
                     // The game will complain but it does work, so don't warn unless warranted.
+                    // The later definition is dropped, though, so that one always warns.
                     if other.key.loc.kind <= key.loc.kind {
-                        dup_error(&other.key, &key, "event");
+                        dup_error_discarded(&other.key, &key, "event");
                     }
                     return;
                 } else if Game::is_ck3() {

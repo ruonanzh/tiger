@@ -292,6 +292,20 @@ fn test_duplicate_item_origin() {
     assert_eq!(report.0.severity, Severity::Warning);
     assert_eq!(report.1[1].loc.pathname(), Path::new("events/self-dup-b.txt"));
 
+    // Gui types keep the earlier definition and drop the later block, so the duplicate is a
+    // warning even though the two files are in the same mod.
+    let msg = "gui type is redefined by another gui type";
+    let report = take_report(&mut reports, "gui/self-dup-type-a.gui", msg)
+        .or_else(|| take_report(&mut reports, "gui/self-dup-type-b.gui", msg));
+    let report = report.expect("mod+mod duplicate gui type test");
+    assert_eq!(report.0.severity, Severity::Warning);
+    let mut paths: Vec<&Path> = report.1.iter().map(|p| p.loc.pathname()).collect();
+    paths.sort_unstable();
+    assert_eq!(
+        paths,
+        vec![Path::new("gui/self-dup-type-a.gui"), Path::new("gui/self-dup-type-b.gui")]
+    );
+
     dbg!(&reports);
     assert!(reports.is_empty());
 }
