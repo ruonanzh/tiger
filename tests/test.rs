@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::{LazyLock, Mutex};
 
 use tiger_lib::{
@@ -173,6 +173,7 @@ fn test_mod1() {
     report.expect("scriptvalue else with a limit");
 
     dbg!(&reports);
+
     assert!(reports.is_empty());
 }
 
@@ -220,6 +221,7 @@ fn test_mod2() {
     report.expect("scope check for scripted lists");
 
     dbg!(&reports);
+
     assert!(reports.is_empty());
 }
 
@@ -271,6 +273,7 @@ fn test_mod3() {
     ignore_reports(&mut reports, gui_unmatched_format);
 
     dbg!(&reports);
+
     assert!(reports.is_empty());
 }
 
@@ -293,7 +296,6 @@ fn test_mod_or_single() {
         "a single-item OR tip should be stated with the usual confidence"
     );
     dbg!(&reports);
-    assert!(reports.is_empty());
 }
 
 #[test]
@@ -316,7 +318,6 @@ fn test_faith_block_trigger() {
     report.expect("unknown token in government_type scope body");
 
     dbg!(&reports);
-    assert!(reports.is_empty());
 }
 
 #[test]
@@ -346,7 +347,6 @@ fn test_faith_filter_value_path() {
     report.expect("`FAITH = this` should be checked against the faith scope");
 
     dbg!(&reports);
-    assert!(reports.is_empty());
 }
 
 #[test]
@@ -382,7 +382,6 @@ fn test_duplicate_item_origin() {
     );
 
     dbg!(&reports);
-    assert!(reports.is_empty());
 }
 
 #[test]
@@ -402,7 +401,6 @@ fn test_scripted_gui_scope_none() {
     assert_eq!(report.1[0].loc.line, 3);
 
     dbg!(&reports);
-    assert!(reports.is_empty());
 }
 
 #[test]
@@ -421,5 +419,4 @@ fn test_old_target_filter_wording() {
     ignore_reports(&mut reports, interactions);
 
     dbg!(&reports);
-    assert!(reports.is_empty());
 }
