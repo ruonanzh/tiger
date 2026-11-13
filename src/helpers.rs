@@ -33,9 +33,18 @@ pub enum AllowInject {
     Yes,
 }
 
-/// Warns about a redefinition of a database item
+/// Reports a redefinition of a database item.
+///
+/// When one of the definitions comes from vanilla and the other from a mod, the mod is deliberately
+/// overriding the vanilla item, so that is only a tip. When both definitions are mod files, one mod
+/// definition silently overwrites another, and that stays a warning.
 pub fn dup_error(key: &Token, other: &Token, id: &str) {
-    warn(ErrorKey::DuplicateItem)
+    let report = if key.loc.kind.counts_as_vanilla() == other.loc.kind.counts_as_vanilla() {
+        warn(ErrorKey::DuplicateItem)
+    } else {
+        tips(ErrorKey::DuplicateItem)
+    };
+    report
         .msg(format!("{id} is redefined by another {id}"))
         .loc(other)
         .loc_msg(key, format!("the other {id} is here"))

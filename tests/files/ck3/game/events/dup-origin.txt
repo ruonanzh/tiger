@@ -1,0 +1,6 @@
+﻿namespace = dup_origin
+
+# Vanilla definition. mod4 overrides it on purpose in events/override-dup-origin.txt.
+dup_origin.0001 = {
+	hidden = yes
+}

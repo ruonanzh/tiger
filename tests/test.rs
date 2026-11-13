@@ -1,8 +1,9 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::{LazyLock, Mutex};
 
 use tiger_lib::{
-    Everything, LogReportMetadata, LogReportPointers, TigerHashMap, TigerHashSet, take_reports,
+    Everything, LogReportMetadata, LogReportPointers, Severity, TigerHashMap, TigerHashSet,
+    take_reports,
 };
 
 static TEST_MUTEX: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
@@ -268,6 +269,28 @@ fn test_mod3() {
         take_report_pointer(&mut reports, gui_unmatched_format, "quoted string not closed", 2, 16);
     report.expect("unmatched quote format string gui test");
     ignore_reports(&mut reports, gui_unmatched_format);
+
+    dbg!(&reports);
+    assert!(reports.is_empty());
+}
+
+#[test]
+fn test_duplicate_item_origin() {
+    let mut reports = check_mod_helper("mod4");
+
+    let msg = "event is redefined by another event";
+
+    // Vanilla event overridden by the mod: this is deliberate, so it should be a tip.
+    let report = take_report(&mut reports, "events/dup-origin.txt", msg);
+    let report = report.expect("vanilla+mod duplicate event test");
+    assert_eq!(report.0.severity, Severity::Tips);
+    assert_eq!(report.1[1].loc.pathname(), Path::new("events/override-dup-origin.txt"));
+
+    // Event defined twice inside the mod: this is a silent self-overwrite, so keep the warning.
+    let report = take_report(&mut reports, "events/self-dup-a.txt", msg);
+    let report = report.expect("mod+mod duplicate event test");
+    assert_eq!(report.0.severity, Severity::Warning);
+    assert_eq!(report.1[1].loc.pathname(), Path::new("events/self-dup-b.txt"));
 
     dbg!(&reports);
     assert!(reports.is_empty());

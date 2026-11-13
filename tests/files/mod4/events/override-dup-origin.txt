@@ -1,0 +1,6 @@
+﻿namespace = dup_origin
+
+# Vanilla + mod definition of the same event: a deliberate override, so this is only a tip.
+dup_origin.0001 = {
+	hidden = yes
+}
