@@ -52,15 +52,14 @@ impl DbKind for EpidemicType {
             vd.field_choice("channel", &["red", "green", "blue", "alpha"]);
         });
 
-        vd.field_trigger_builder(
-            "can_infect_character",
-            Tooltipped::No,
-            build_character_epidemic_sc,
-        );
+        vd.field_trigger_builder("can_infect_character", Tooltipped::No, |key| {
+            let mut sc = build_character_epidemic_sc(key);
+            sc.define_name("province", Scopes::Province, key);
+            sc
+        });
 
         vd.field_script_value_no_breakdown_builder("character_infection_chance", |key| {
             let mut sc = build_character_epidemic_sc(key);
-            // undocumented
             sc.define_name("province", Scopes::Province, key);
             sc
         });
@@ -133,7 +132,35 @@ fn build_province_epidemic_sc(key: &Token) -> ScopeContext {
 
 fn validate_outbreak_level(block: &Block, data: &Everything) {
     let mut vd = Validator::new(block, data);
-    vd.field_bool("global_notification");
+    vd.replaced_field("global_notification", "`global` in `notification`");
+    vd.field_validated_block("notification", |block, data| {
+        let mut vd = Validator::new(block, data);
+        vd.field_bool("global");
+        // An empty value disables the notification or event
+        for field in ["holder_notification", "liege_notification", "realm_notification"] {
+            vd.field_validated_value(field, |_, mut vd| {
+                if !vd.maybe_is("") {
+                    vd.item(Item::Message);
+                }
+            });
+        }
+        for field in ["holder_event", "liege_event", "realm_event"] {
+            vd.field_validated_value(field, |key, mut vd| {
+                if !vd.maybe_is("") {
+                    vd.item(Item::Event);
+                    // The docs give the events these scopes
+                    let mut sc = ScopeContext::new(Scopes::Character, key);
+                    sc.define_name("epidemic", Scopes::Epidemic, key);
+                    sc.define_name("province", Scopes::Province, key);
+                    let token = vd.value();
+                    data.event_check_scope(token, &mut sc);
+                    if let Some(mut event_sc) = sc.root_for_event(token, data) {
+                        data.event_validate_call(token, &mut event_sc);
+                    }
+                }
+            });
+        }
+    });
     vd.field_script_value_no_breakdown_builder("outbreak_chance", |key| {
         let mut sc = ScopeContext::new(Scopes::Province, key);
         sc.define_name("epidemic_type", Scopes::EpidemicType, key);
