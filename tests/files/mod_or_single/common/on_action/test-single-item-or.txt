@@ -1,0 +1,8 @@
+﻿# A single-item OR is a harmless redundant wrapper, so this should be a tip and not a warning.
+test_or_single = {
+	trigger = {
+		OR = {
+			always = yes
+		}
+	}
+}

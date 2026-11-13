@@ -175,8 +175,9 @@ pub fn validate_trigger_internal(
             let info = "you can remove the AND and just have the item there";
             tips(ErrorKey::Performance).msg(msg).info(info).loc(block).push();
         } else if caller == "or" {
-            let msg = "OR with only one item inside is probably not what you intended";
-            warn(ErrorKey::Logic).weak().msg(msg).loc(block).push();
+            let msg = "OR with only one item inside is useless";
+            let info = "you can remove the OR and just have the item there";
+            tips(ErrorKey::Performance).msg(msg).info(info).loc(block).push();
         }
     }
 
