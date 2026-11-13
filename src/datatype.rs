@@ -251,8 +251,13 @@ pub fn validate_datatypes(
             // macros place in the middle of a chain) are not in those tables, so they still
             // expand here as before.
             let resolves_as_method = i != 0
-                && (!matches!(lookup_promote(codes[i].name.as_str(), Datatype::Unknown), LookupResult::NotFound)
-                    || !matches!(lookup_function(codes[i].name.as_str(), Datatype::Unknown), LookupResult::NotFound));
+                && (!matches!(
+                    lookup_promote(codes[i].name.as_str(), Datatype::Unknown),
+                    LookupResult::NotFound
+                ) || !matches!(
+                    lookup_function(codes[i].name.as_str(), Datatype::Unknown),
+                    LookupResult::NotFound
+                ));
             while !resolves_as_method
                 && let Some(binding) = data.data_bindings.get(codes[i].name.as_str())
             {
