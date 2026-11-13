@@ -272,3 +272,21 @@ fn test_mod3() {
     dbg!(&reports);
     assert!(reports.is_empty());
 }
+
+#[test]
+fn test_faith_block_trigger() {
+    let mut reports = check_mod_helper("mod4");
+
+    let events = "events/test-faith-block-trigger.txt";
+
+    // `faith = { ... }` in a trigger is a scope drill into the faith scope.
+    let report = take_report(&mut reports, events, "expected value, found block");
+    assert!(dbg!(report).is_none(), "faith = {{ ... }} should be accepted in a trigger");
+
+    // The body of the scope drill must still be validated, in the faith scope.
+    let report = take_report(&mut reports, events, "unknown token `bogus_trigger_in_faith_scope`");
+    report.expect("unknown token in faith scope body");
+
+    dbg!(&reports);
+    assert!(reports.is_empty());
+}

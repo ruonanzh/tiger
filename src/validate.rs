@@ -2,7 +2,7 @@
 
 use std::fmt::{Display, Formatter};
 
-use crate::block::{BV, Block};
+use crate::block::{BV, Block, Comparator, Eq};
 #[cfg(feature = "ck3")]
 use crate::ck3::tables::misc::OUTBREAK_INTENSITIES;
 #[cfg(feature = "ck3")]
@@ -34,7 +34,8 @@ use crate::trigger::validate_target_ok_this;
 use crate::trigger::validate_trigger;
 use crate::trigger::{
     Part, PartFlags, is_character_token, partition, validate_argument, validate_argument_scope,
-    validate_inscopes, validate_trigger_internal, warn_not_first,
+    validate_inscopes, validate_target, validate_trigger_internal, validate_trigger_rhs,
+    warn_not_first,
 };
 use crate::validator::Validator;
 
@@ -646,7 +647,32 @@ pub fn validate_inside_iterator(
             vd.field_target("government_type", sc, Scopes::GovernmentType);
             vd.field_bool("only_independent");
             vd.field_choice("tier", &["county", "duchy", "kingdom", "empire", "hegemony"]);
-            vd.field_target("faith", sc, Scopes::Faith);
+            // `faith = faith:foo` is a filter here, but in a trigger `faith = { ... }` is a
+            // scope drill into the faith scope, just like `faith` outside iterators.
+            if listtype.is_for_triggers() {
+                let max_sev = vd.max_severity();
+                vd.field_validated_key("faith", |key, bv, data| match bv {
+                    BV::Value(token) => {
+                        validate_target(token, data, sc, Scopes::Faith);
+                    }
+                    BV::Block(_) => {
+                        sc.open_builder();
+                        sc.replace(Scopes::Faith, key.clone());
+                        validate_trigger_rhs(
+                            key,
+                            Comparator::Equals(Eq::Single),
+                            bv,
+                            data,
+                            sc,
+                            tooltipped,
+                            false,
+                            max_sev,
+                        );
+                    }
+                });
+            } else {
+                vd.field_target("faith", sc, Scopes::Faith);
+            }
             vd.field_target("culture", sc, Scopes::Culture);
             // The docs list these names in the filter descriptions but the plain ones above in
             // their usage example. Vanilla 1.20 uses `faith_filter`.
