@@ -14,3 +14,10 @@ test_gui_scope_character = {
 	effect = {
 	}
 }
+
+# The same as `test_gui_scope_none`, but with the `scope` field left out entirely.
+# That must behave like `scope = none`, so the chain may start with GuiScope.AddScope.
+test_gui_scope_omitted = {
+	effect = {
+	}
+}
