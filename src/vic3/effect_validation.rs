@@ -1328,6 +1328,20 @@ pub fn validate_temporary_hostilities(
     }
 }
 
+pub fn validate_replace_decree(
+    _key: &Token,
+    _block: &Block,
+    _data: &Everything,
+    _sc: &mut ScopeContext,
+    mut vd: Validator,
+    _tooltipped: Tooltipped,
+) {
+    for field in ["from", "to"] {
+        vd.req_field(field);
+        vd.field_item(field, Item::Decree);
+    }
+}
+
 pub fn validate_replace_character_roles(
     _key: &Token,
     _block: &Block,

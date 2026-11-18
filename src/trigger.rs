@@ -1341,7 +1341,16 @@ pub fn validate_target_ok_this(
             return Scopes::all_but_none();
         }
     }
+    if token.is("") {
+        let msg = format!("expected a {outscopes} target, found an empty expression");
+        err(ErrorKey::Validation).msg(msg).loc(token).push();
+        return Scopes::all();
+    }
     let part_vec = partition(token);
+    let Some(last_part) = part_vec.last() else {
+        // A chain containing only separators was already diagnosed by partition.
+        return Scopes::all();
+    };
     sc.open_builder();
     for i in 0..part_vec.len() {
         let mut part_flags = PartFlags::empty();
@@ -1451,12 +1460,11 @@ pub fn validate_target_ok_this(
     }
     let (final_scopes, because) = sc.scopes_reason(data);
     if !outscopes.intersects(final_scopes | Scopes::None) {
-        let part = &part_vec[part_vec.len() - 1];
-        let msg = format!("`{part}` produces {final_scopes} but expected {outscopes}");
+        let msg = format!("`{last_part}` produces {final_scopes} but expected {outscopes}");
         // Must not be at the same location to avoid spurious error messages
-        let opt_loc = (part.loc() != because.token().loc).then(|| because.token());
+        let opt_loc = (last_part.loc() != because.token().loc).then(|| because.token());
         let msg2 = format!("scope was {}", because.msg());
-        warn(ErrorKey::Scopes).msg(msg).loc(part).opt_loc_msg(opt_loc, msg2).push();
+        warn(ErrorKey::Scopes).msg(msg).loc(last_part).opt_loc_msg(opt_loc, msg2).push();
     }
     sc.close();
     final_scopes

@@ -1457,7 +1457,7 @@ const TRIGGER: &[(Scopes, &str, Trigger)] = &[
     (
         Scopes::Country,
         "pop_type_percent_country",
-        Block(&[("pop_type", Item(Item::PopType)), ("percent", CompareValue)]),
+        Block(&[("target", Scope(Scopes::PopType)), ("value", CompareValue)]),
     ),
     (
         Scopes::State,
@@ -2118,7 +2118,7 @@ const TRIGGER_COMPLEX: &[(Scopes, &str, ArgumentValue, Scopes)] = {
             ScopeOrItem(Scopes::BuildingType, Item::BuildingType),
             Scopes::Value,
         ),
-        (Scopes::Country, "pop_type_percent_country", Item(Item::PopType), Scopes::Value),
+        (Scopes::Country, "pop_type_percent_country", Scope(Scopes::PopType), Scopes::Value),
         (Scopes::State, "pop_type_percent_state", Scope(Scopes::PopType), Scopes::Value),
         (Scopes::State, "population_by_culture", Scope(Scopes::Culture), Scopes::Value),
         (

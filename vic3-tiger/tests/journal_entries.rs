@@ -238,3 +238,61 @@ fn country_triggers_in_outcomes() {
     let repaired = validate(&game, &mod_dir, &native_triggers);
     assert!(repaired.is_empty(), "{repaired:#?}");
 }
+
+#[test]
+fn population_and_country_outcome_arguments() {
+    let (_fixture, game, mod_dir) = setup();
+    write_file(&game, "game/common/pop_types/test_pops.txt", "\u{feff}tiger_pop = {}");
+    write_file(
+        &game,
+        "game/common/decrees/test_decrees.txt",
+        "\u{feff}decree_tiger_old = {}\ndecree_tiger_new = {}",
+    );
+    write_file(&game, "game/common/country_definitions/test_countries.txt", "\u{feff}TST = {}");
+
+    let script = JOURNAL_ENTRY
+        .replace(
+            "trigger = { always = yes }",
+            r#"trigger = {
+            pop_type_percent_country = { target = pop_type:tiger_pop value > 0.25 }
+            "pop_type_percent_country(pop_type:tiger_pop)" >= 0.25
+        }"#,
+        )
+        .replace(
+            "effect = { set_variable = tiger_completed }",
+            "effect = {
+            replace_decree = { from = decree_tiger_old to = decree_tiger_new }
+            every_scope_state = { replace_decree = { from = decree_tiger_new to = decree_tiger_old } }
+            every_scope_war = { add_war_support_change = { target = c:TST value = -10 } }
+            leave_plays_supporting = c:TST
+        }",
+        );
+
+    let clean = validate(&game, &mod_dir, &script);
+    assert!(clean.is_empty(), "{clean:#?}");
+
+    let malformed = script
+        .replace("target = pop_type:tiger_pop", "target = pop_type:missing_pop")
+        .replace("(pop_type:tiger_pop)", "(pop_type:other_missing_pop)")
+        .replace("from = decree_tiger_old to = decree_tiger_new", "to = decree_tiger_new")
+        .replace("to = decree_tiger_old", "to = decree_tiger_missing")
+        .replace("target = c:TST value = -10", "target = cd:TST value = c:TST")
+        .replace("leave_plays_supporting = c:TST", "leave_plays_supporting = cd:TST");
+
+    let reports = validate(&game, &mod_dir, &malformed);
+    expect_report(&reports, "missing-item", "missing_pop", 9);
+    expect_report(&reports, "missing-item", "other_missing_pop", 10);
+    expect_report(&reports, "field-missing", "required field `from` missing", 13);
+    expect_report(&reports, "missing-item", "decree_tiger_missing", 14);
+    expect_report(&reports, "scopes", "expected country", 15);
+    expect_report(&reports, "scopes", "expected value", 15);
+    expect_report(&reports, "scopes", "expected country", 16);
+
+    let empty_argument = script.replace("(pop_type:tiger_pop)", "()");
+    let reports = validate(&game, &mod_dir, &empty_argument);
+    expect_report(&reports, "validation", "empty expression", 10);
+    assert_eq!(reports.len(), 1, "{reports:#?}");
+
+    let repaired = validate(&game, &mod_dir, &script);
+    assert!(repaired.is_empty(), "{repaired:#?}");
+}
