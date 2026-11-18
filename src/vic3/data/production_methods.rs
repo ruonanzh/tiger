@@ -30,6 +30,7 @@ impl DbKind for ProductionMethod {
 
         vd.field_item("texture", Item::File);
         vd.field_bool("is_default");
+        vd.field_value("scoring_override");
         vd.field_bool("low_pop_method");
 
         vd.field_validated_block("profession_ratio", |block, data| {

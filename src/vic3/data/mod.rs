@@ -62,6 +62,7 @@ pub mod principles;
 pub mod production_methods;
 pub mod proposals;
 pub mod provinces;
+pub mod regional_exile_pools;
 pub mod religions;
 pub mod scripted_buttons;
 pub mod scripted_progress_bars;

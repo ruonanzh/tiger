@@ -357,6 +357,7 @@ const SCOPE_EFFECT: &[(Scopes, &str, Effect)] = &[
     (Scopes::Character, "remove_trait", Item(Item::CharacterTrait)),
     (Scopes::None, "remove_variable", Identifier("variable name")),
     (Scopes::DiplomaticPlay, "remove_war_goal", Vb(validate_remove_war_goal)),
+    (Scopes::Country, "renege_treaty_ports_with", Scope(Scopes::Country)),
     (Scopes::Character, "replace_character_roles", Vb(validate_replace_character_roles)),
     (Scopes::Country.union(Scopes::State), "replace_decree", Vb(validate_replace_decree)),
     (Scopes::State, "reset_hub_names", Yes),

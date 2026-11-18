@@ -849,7 +849,7 @@ fn match_trigger_bv(
                     match_trigger_fields(fields, block, data, sc, tooltipped, negated, max_sev);
             }
         }
-        #[cfg(feature = "ck3")]
+        #[cfg(any(feature = "ck3", feature = "vic3"))]
         Trigger::ScopeOrBlock(s, fields) => match bv {
             BV::Value(token) => {
                 validate_target(token, data, sc, *s);
@@ -1954,7 +1954,7 @@ pub enum Trigger {
     /// trigger takes a block with these fields
     Block(&'static [(&'static str, Trigger)]),
     /// trigger takes a block with these fields
-    #[cfg(feature = "ck3")]
+    #[cfg(any(feature = "ck3", feature = "vic3"))]
     ScopeOrBlock(Scopes, &'static [(&'static str, Trigger)]),
     /// trigger takes a block with these fields
     #[cfg(feature = "ck3")]

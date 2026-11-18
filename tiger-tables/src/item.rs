@@ -535,6 +535,7 @@ pub enum Item {
     #[cfg(feature = "vic3")] PrincipleGroup,
     #[cfg(feature = "vic3")] ProductionMethodGroup,
     #[cfg(feature = "vic3")] ProposalType,
+    #[cfg(feature = "vic3")] RegionalExilePool,
     #[cfg(feature = "vic3")] RelationsThreshold,
     #[cfg(feature = "vic3")] ScriptedButton,
     #[cfg(feature = "vic3")] ScriptedProgressBar,
@@ -1849,6 +1850,8 @@ impl Item {
             Item::ProductionMethodGroup => "common/production_method_groups/",
             #[cfg(feature = "vic3")]
             Item::ProposalType => "common/proposal_types/",
+            #[cfg(feature = "vic3")]
+            Item::RegionalExilePool => "common/regional_exile_pools/",
             #[cfg(feature = "vic3")]
             Item::RelationsThreshold => "",
             #[cfg(feature = "vic3")]

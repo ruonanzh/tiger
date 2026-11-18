@@ -497,6 +497,16 @@ const TRIGGER: &[(Scopes, &str, Trigger)] = &[
         "has_building",
         Item(Item::BuildingType),
     ),
+    (
+        Scopes::Country,
+        "has_building_levels_in_state_region",
+        Block(&[
+            ("region", Item(Item::StateRegion)),
+            ("building", Item(Item::BuildingType)),
+            ("levels", CompareValue),
+            ("?is_incorporated", Boolean),
+        ]),
+    ),
     (Scopes::PoliticalMovement, "has_character_ideology", Item(Item::Ideology)),
     (Scopes::Country, "has_civil_war_from_movement_type", Scope(Scopes::PoliticalMovementType)),
     (
@@ -756,6 +766,11 @@ const TRIGGER: &[(Scopes, &str, Trigger)] = &[
         "has_war_support",
         Block(&[("target", Scope(Scopes::Country)), ("value", CompareValue)]),
     ),
+    (
+        Scopes::War,
+        "has_war_support_change",
+        Block(&[("target", Scope(Scopes::Country)), ("value", CompareValue)]),
+    ),
     (Scopes::Country, "has_war_with", Scope(Scopes::Country)),
     (Scopes::Country, "has_wasted_construction", Boolean),
     (Scopes::None, "hidden_trigger", Control),
@@ -919,6 +934,14 @@ const TRIGGER: &[(Scopes, &str, Trigger)] = &[
     (Scopes::Pop, "is_in_mild_starvation", Boolean),
     (Scopes::Ship, "is_in_port", Boolean),
     (Scopes::Country, "is_in_power_bloc", Boolean),
+    (
+        Scopes::Character,
+        "is_in_regional_exile_pool",
+        ScopeOrBlock(
+            Scopes::Bool,
+            &[("exile_pool", Item(Item::RegionalExilePool)), ("?value", Boolean)],
+        ),
+    ),
     (Scopes::State, "is_in_revolt", Boolean),
     (Scopes::State, "is_in_same_market_area", Scope(Scopes::State)),
     (Scopes::Country, "is_in_same_power_bloc", Scope(Scopes::Country)),

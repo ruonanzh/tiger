@@ -45,6 +45,7 @@ pub fn validate_event(event: &Event, data: &Everything, sc: &mut ScopeContext) {
     vd.field_choice("category", EVENT_CATEGORIES);
 
     vd.field_bool("is_popup");
+    vd.field_bool("fire_only_once");
     vd.field_bool("orphan");
     vd.field_bool("hidden");
     let hidden = event.block.field_value_is("hidden", "yes");
