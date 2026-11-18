@@ -1,0 +1,24 @@
+infamy_test = {
+    kind = directed
+    wargoal = {
+        infamy_min = scope:infamy_dynamic.infamy
+        infamy_max = { value = 3 add = root.infamy add = scope:own_market_goods.market_goods_sell_orders }
+        infamy_severity = {
+            value = scope:target_country.infamy
+            add = scope:infamy_dynamic.infamy
+            add = scope:infamy_dynamic.infamy
+            add = scope:infamy_other.infamy
+            add = scope:target_country.infamy
+        }
+        infamy_severitty = 10
+    }
+}
+
+infamy_goods_test = {
+    kind = directed
+    maintenance_paid_by = source_country
+    required_inputs = { goods }
+    wargoal = {
+        infamy_max = scope:own_market_goods.market_goods_sell_orders
+    }
+}

@@ -244,7 +244,7 @@ impl DbKind for TreatyArticle {
             validate_ai(block, data, required_inputs, is_directed);
         });
 
-        vd.field_validated_block("wargoal", |block, data| {
+        vd.field_validated_key_block("wargoal", |wargoal, block, data| {
             let mut vd = Validator::new(block, data);
             vd.field_integer("execution_priority");
             let contestion_types = &[
@@ -259,9 +259,20 @@ impl DbKind for TreatyArticle {
             ];
             vd.field_choice("contestion_type", contestion_types);
 
-            for script_value in &["maneuvers", "infamy"] {
+            for script_value in
+                &["maneuvers", "infamy", "infamy_severity", "infamy_min", "infamy_max"]
+            {
                 vd.field_script_value_builder(script_value, |key| {
-                    let mut sc = ScopeContext::new(Scopes::Country, key);
+                    let mut sc =
+                        if matches!(*script_value, "infamy_severity" | "infamy_min" | "infamy_max")
+                        {
+                            // These calculations receive the same inputs from the enclosing wargoal.
+                            let mut sc = ScopeContext::new(Scopes::Country, wargoal);
+                            sc.advise_on_missing_saved_scopes();
+                            sc
+                        } else {
+                            ScopeContext::new(Scopes::Country, key)
+                        };
                     sc.define_name("target_country", Scopes::Country, key);
                     for input in required_inputs {
                         match input.as_str() {
@@ -269,6 +280,7 @@ impl DbKind for TreatyArticle {
                             "goods" => {
                                 sc.define_name("goods", Scopes::Goods, key);
                                 sc.define_name("market_goods", Scopes::MarketGoods, key);
+                                sc.define_name("own_market_goods", Scopes::MarketGoods, key);
                             }
                             "state" => sc.define_name("state", Scopes::State, key),
                             "strategic_region" => {

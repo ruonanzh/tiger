@@ -138,7 +138,7 @@ impl DbKind for WarGoalType {
             vd.field_trigger_builder(condition, Tooltipped::Yes, &build_sc);
         }
 
-        for calculation in &["maneuvers", "infamy"] {
+        for calculation in &["maneuvers", "infamy", "infamy_severity", "infamy_min", "infamy_max"] {
             vd.field_script_value_builder(calculation, &build_sc);
         }
 

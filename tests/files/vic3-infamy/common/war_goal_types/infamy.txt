@@ -1,0 +1,13 @@
+infamy_test = {
+    kind = custom
+    infamy_min = 5
+    infamy_max = { value = 3 add = root.infamy }
+    infamy_severity = {
+        value = scope:target_country.infamy
+        add = scope:infamy_dynamic.infamy
+        add = scope:infamy_dynamic.infamy
+        add = scope:infamy_other.infamy
+        add = scope:target_country.infamy
+    }
+    infamy_severitty = 10
+}
