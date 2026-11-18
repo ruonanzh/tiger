@@ -52,6 +52,7 @@ impl DbKind for ShipNameDefinition {
                 );
                 vd.field_item("key", Item::Localization);
                 vd.field_item("custom_text", Item::Localization);
+                vd.field_bool("is_prefix");
                 vd.multi_field_item("quick_trigger_required_law", Item::LawType);
                 vd.multi_field_item("quick_trigger_forbidden_law", Item::LawType);
                 vd.multi_field_item("quick_trigger_required_country", Item::Country);

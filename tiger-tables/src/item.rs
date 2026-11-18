@@ -443,6 +443,7 @@ pub enum Item {
 
     // Items specific to vic3
     #[cfg(feature = "vic3")] AcceptanceStatus,
+    #[cfg(feature = "vic3")] AiShipCategory,
     #[cfg(feature = "vic3")] AiStrategicRegionStanceType,
     #[cfg(feature = "vic3")] AirGraphics,
     #[cfg(feature = "vic3")] Alert,
@@ -1663,6 +1664,8 @@ impl Item {
 
             #[cfg(feature = "vic3")]
             Item::AcceptanceStatus => "common/acceptance_statuses/",
+            #[cfg(feature = "vic3")]
+            Item::AiShipCategory => "common/ai_ship_categories/",
             #[cfg(feature = "vic3")]
             Item::AiStrategicRegionStanceType => "common/ai_strategic_region_stance_types",
             #[cfg(feature = "vic3")]

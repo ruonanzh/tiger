@@ -64,6 +64,7 @@ impl DbKind for Culture {
         vd.multi_field_list_items("taboos", Item::Goods);
 
         vd.field_item("graphics", Item::CultureGraphics);
+        vd.field_item("seal_and_signature_texture", Item::File);
         vd.multi_field_validated_block("ethnicities", |block, data| {
             let mut vd = Validator::new(block, data);
             vd.numeric_keys(|_, bv| {

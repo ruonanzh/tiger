@@ -13,6 +13,8 @@ use crate::vic3::modif::ModifKinds;
 use crate::vic3::tables::modifs::maybe_warn_modifiable_capitalization;
 
 #[derive(Clone, Debug)]
+pub struct AiShipCategory {}
+#[derive(Clone, Debug)]
 pub struct ShipType {}
 #[derive(Clone, Debug)]
 pub struct ShipGroup {}
@@ -27,6 +29,23 @@ inventory::submit! {
 }
 inventory::submit! {
     ItemLoader::Normal(GameFlags::Vic3, Item::ShipVeterancyLevel, ShipVeterancyLevel::add)
+}
+
+inventory::submit! {
+    ItemLoader::Normal(GameFlags::Vic3, Item::AiShipCategory, AiShipCategory::add)
+}
+
+impl AiShipCategory {
+    pub fn add(db: &mut Db, key: Token, block: Block) {
+        db.add(Item::AiShipCategory, key, block, Box::new(Self {}));
+    }
+}
+
+impl DbKind for AiShipCategory {
+    fn validate(&self, _key: &Token, block: &Block, data: &Everything) {
+        let mut vd = Validator::new(block, data);
+        vd.field_trigger_rooted("can_build", Tooltipped::No, Scopes::Country);
+    }
 }
 
 impl ShipType {
@@ -61,6 +80,7 @@ impl DbKind for ShipType {
         });
 
         vd.field_item("ship_group", Item::ShipGroup);
+        vd.field_item("ai_ship_category", Item::AiShipCategory);
 
         vd.field_validated_block("construction_goods", |block, data| {
             let vd = Validator::new(block, data);
@@ -80,6 +100,7 @@ impl DbKind for ShipType {
         vd.field_numeric("base_construction_cost");
         vd.field_numeric("modification_construction_cost");
         vd.field_numeric("combat_power_multiplier");
+        vd.field_numeric("vulnerability_exploitation");
 
         vd.field_item("icon", Item::File);
 
