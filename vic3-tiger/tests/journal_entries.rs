@@ -1,5 +1,5 @@
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use serde::Deserialize;
@@ -81,8 +81,7 @@ fn expect_report(reports: &[Report], key: &str, message: &str, line: usize) {
     );
 }
 
-#[test]
-fn journal_entry_outcomes() {
+fn setup() -> (tempfile::TempDir, PathBuf, PathBuf) {
     let fixture = tempfile::tempdir().unwrap();
     let game = fixture.path().join("game-installation");
     let mod_dir = fixture.path().join("test-mod");
@@ -126,6 +125,12 @@ fn journal_entry_outcomes() {
         );
     }
 
+    (fixture, game, mod_dir)
+}
+
+#[test]
+fn journal_entry_outcomes() {
+    let (_fixture, game, mod_dir) = setup();
     let clean = validate(&game, &mod_dir, JOURNAL_ENTRY);
     assert!(clean.is_empty(), "{clean:#?}");
 
@@ -181,4 +186,55 @@ fn journal_entry_outcomes() {
 
     let recovered = validate(&game, &mod_dir, JOURNAL_ENTRY);
     assert!(recovered.is_empty(), "{recovered:#?}");
+}
+
+#[test]
+fn country_triggers_in_outcomes() {
+    let (_fixture, game, mod_dir) = setup();
+    write_file(
+        &game,
+        "game/map_data/state_regions/test_regions.txt",
+        "\u{feff}STATE_TIGER_TEST = { id = 1 provinces = {} }",
+    );
+    write_file(&game, "game/common/country_definitions/test_countries.txt", "\u{feff}TST = {}");
+    let native_triggers = JOURNAL_ENTRY.replace(
+        "trigger = { always = yes }",
+        "trigger = {
+            owns_entire_state_region_uncontested = STATE_TIGER_TEST
+            war_may_restore_country = TST
+            war_may_restore_country = cd:TST
+            war_may_restore_country = c:TST.country_definition
+            is_independent_and_not_being_subjugated = yes
+            country_or_subject_owns_entire_state_region_uncontested = STATE_TIGER_TEST
+            has_or_is_contesting_state_in_state_region = STATE_TIGER_TEST
+            is_subject_of_and_not_being_freed = c:TST
+            owns_entire_or_is_contesting_state_region = STATE_TIGER_TEST
+            has_state_in_state_region_uncontested = STATE_TIGER_TEST
+        }",
+    );
+    let valid = validate(&game, &mod_dir, &native_triggers);
+    assert!(valid.is_empty(), "{valid:#?}");
+
+    let malformed_triggers = native_triggers
+        .replace(
+            "owns_entire_state_region_uncontested = STATE_TIGER_TEST",
+            "owns_entire_state_region_uncontested = STATE_MISSING",
+        )
+        .replace("war_may_restore_country = cd:TST", "war_may_restore_country = c:TST")
+        .replace(
+            "war_may_restore_country = c:TST.country_definition",
+            "any_scope_state = { war_may_restore_country = TST }",
+        )
+        .replace(
+            "is_independent_and_not_being_subjugated = yes",
+            "is_independent_and_not_being_subjugatd = yes",
+        );
+    let reports = validate(&game, &mod_dir, &malformed_triggers);
+    expect_report(&reports, "missing-item", "STATE_MISSING", 9);
+    expect_report(&reports, "scopes", "expected country definition", 11);
+    expect_report(&reports, "scopes", "scope seems to be state", 12);
+    expect_report(&reports, "unknown-field", "is_independent_and_not_being_subjugatd", 13);
+
+    let repaired = validate(&game, &mod_dir, &native_triggers);
+    assert!(repaired.is_empty(), "{repaired:#?}");
 }
