@@ -33,6 +33,7 @@ impl DbKind for Objective {
         vd.replaced_field("background", "enabled_background and disabled_background");
         vd.field_item("enabled_background", Item::File);
         vd.field_item("disabled_background", Item::File);
+        vd.field_item("illustration", Item::File);
 
         vd.field_list_items("recommended_tags", Item::Country);
         vd.field_bool("available_for_all_countries");

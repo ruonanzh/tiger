@@ -147,6 +147,10 @@ impl Music {
             vd.field_bool("trigger_prio_override");
             vd.field_trigger("is_valid", Tooltipped::No, &mut sc);
 
+            if Game::is_vic3() && !self.key.loc.pathname().starts_with("music/main_themes") {
+                vd.field_script_value_rooted("weight", scope);
+            }
+
             vd.field_list_numeric_exactly("subsequent_playback_chance", 3);
         }
     }

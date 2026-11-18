@@ -144,6 +144,30 @@ impl DbKind for WarGoalType {
 
         vd.field_effect_builder("on_enforced", Tooltipped::Yes, &build_sc);
 
+        vd.field_validated_block("mirrored_wargoal", |block, data| {
+            let mut vd = Validator::new(block, data);
+            vd.req_field("method");
+            vd.field_choice(
+                "method",
+                &[
+                    "territorial",
+                    "swap",
+                    "liberate_loser",
+                    "reverse_transfer",
+                    "subjugate",
+                    "restore_subject",
+                    "reparations",
+                    "no_mirror",
+                ],
+            );
+            if block.get_field_value("method").is_some_and(|method| method.is("swap")) {
+                vd.req_field("type");
+                vd.field_item("type", Item::WarGoalType);
+            } else {
+                vd.field_value("type"); // The engine only uses this field for swap.
+            }
+        });
+
         vd.multi_field_validated_block("ai", |block, data| {
             let mut vd = Validator::new(block, data);
             vd.field_bool("is_significant_demand");

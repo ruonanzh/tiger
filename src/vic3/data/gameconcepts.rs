@@ -29,6 +29,7 @@ impl DbKind for GameConcept {
 
         vd.field_item("texture", Item::File);
         vd.field_bool("is_loading_tip");
+        vd.field_bool("shown_in_encyclopedia");
         vd.field_item("tutorial_lesson", Item::TutorialLesson);
     }
 }
