@@ -1,3 +1,5 @@
+mod activation;
+
 use crate::block::Block;
 use crate::context::ScopeContext;
 use crate::data::on_actions::validate_on_action;
@@ -56,6 +58,10 @@ impl DbKind for JournalEntry {
         country_sc.define_name("journal_entry", Scopes::JournalEntry, key);
         country_sc.define_name("target", Scopes::all(), key);
 
+        sc.advise_on_missing_saved_scopes();
+        country_sc.advise_on_missing_saved_scopes();
+        let mut outcome_sc = sc.clone();
+        let mut outcome_country_sc = country_sc.clone();
         vd.field_item("group", Item::JournalEntryGroup);
 
         vd.field_item("icon", Item::File);
@@ -67,8 +73,26 @@ impl DbKind for JournalEntry {
         vd.multi_field_item("scripted_button", Item::ScriptedButton);
 
         vd.field_trigger("activation_description", Tooltipped::Yes, &mut sc);
+        vd.field_trigger("possible", Tooltipped::Yes, &mut sc);
+        vd.field_effect("immediate", Tooltipped::No, &mut sc);
+        vd.field_effect("immediate_all_involved", Tooltipped::No, &mut country_sc);
+        if block.has_key("outcome")
+            && let Some(immediate) = block.get_field_block("immediate")
+        {
+            activation::inherit_saved_scopes(
+                immediate,
+                sc_context,
+                data,
+                &mut outcome_sc,
+                &mut outcome_country_sc,
+            );
+        }
+
         let mut unique_flags = Vec::new();
         vd.multi_field_validated_block("outcome", |outcome, data| {
+            // Each alternative starts from activation, independently of the preceding outcome.
+            let mut sc = outcome_sc.clone();
+            let mut country_sc = outcome_country_sc.clone();
             let mut vd = Validator::new(outcome, data);
             let flags = outcome.get_field_block("flags");
             let flag_token = |name: &str| flags.and_then(|b| b.iter_values().find(|t| t.is(name)));
@@ -120,9 +144,6 @@ impl DbKind for JournalEntry {
             );
         });
 
-        vd.field_trigger("possible", Tooltipped::Yes, &mut sc);
-        vd.field_effect("immediate", Tooltipped::No, &mut sc);
-        vd.field_effect("immediate_all_involved", Tooltipped::No, &mut country_sc);
         vd.field_trigger("complete", Tooltipped::Yes, &mut sc);
         vd.field_effect("on_complete", Tooltipped::Yes, &mut sc);
         vd.field_effect("on_complete_all_involved", Tooltipped::No, &mut country_sc);

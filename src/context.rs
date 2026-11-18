@@ -70,6 +70,9 @@ pub struct ScopeContext {
     /// If `strict_scopes` is false, then the `ScopeContext` will assume any name might be a valid
     /// scope name that we just don't know about yet.
     strict_scopes: bool,
+    /// Named scopes can come from conditional saves and external callers of a Victoria 3 JE.
+    #[cfg(feature = "vic3")]
+    review_missing_scopes: bool,
 
     /// A special flag for scope contexts that are known to be wrong. It's used for the
     /// `scope_override` config file feature. If `no_warn` is set then this `ScopeContext` will not
@@ -178,6 +181,8 @@ pub struct StashedBuilder {
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Signature {
     root: Scopes,
+    #[cfg(feature = "vic3")]
+    review_missing_scopes: bool,
     // these are all sorted
     scope_names: Vec<(&'static str, Scopes)>,
     scope_list_names: Vec<(&'static str, Scopes)>,
@@ -257,6 +262,8 @@ impl ScopeContext {
             is_unrooted: false,
             prev_levels: 0,
             strict_scopes: true,
+            #[cfg(feature = "vic3")]
+            review_missing_scopes: false,
             no_warn: false,
             source: token,
             traceback: Vec::new(),
@@ -285,6 +292,8 @@ impl ScopeContext {
             is_unrooted: true,
             prev_levels: 0,
             strict_scopes: true,
+            #[cfg(feature = "vic3")]
+            review_missing_scopes: false,
             no_warn: false,
             source: token,
             traceback: Vec::new(),
@@ -313,6 +322,11 @@ impl ScopeContext {
             .insert(sc.scope_stack.len() - 1, ScopeEntry::Scope(prev, Reason::Token(token)));
         sc.prev_levels += 1;
         sc
+    }
+
+    #[cfg(feature = "vic3")]
+    pub fn advise_on_missing_saved_scopes(&mut self) {
+        self.review_missing_scopes = true;
     }
 
     /// Declare whether all the named scopes in this scope context are known. Default is true.
@@ -792,6 +806,8 @@ impl ScopeContext {
 
         Signature {
             root,
+            #[cfg(feature = "vic3")]
+            review_missing_scopes: self.review_missing_scopes,
             scope_names: process_scope_names(self, &self.scope_names, data),
             scope_list_names: process_scope_names(self, &self.scope_list_names, data),
             local_names: process_local_names(self, &self.local_names, data),
@@ -945,7 +961,14 @@ impl ScopeContext {
             if self.strict_scopes {
                 if !self.no_warn {
                     let msg = format!("scope:{name} might not be available here");
-                    let mut builder = err(ErrorKey::StrictScopes).weak().msg(msg);
+                    let diagnostic = err(ErrorKey::StrictScopes);
+                    #[cfg(feature = "vic3")]
+                    let diagnostic = if self.review_missing_scopes {
+                        warn(ErrorKey::StrictScopes)
+                    } else {
+                        diagnostic
+                    };
+                    let mut builder = diagnostic.weak().msg(msg);
                     if self.scope_names.len() <= MAX_SCOPE_NAME_LIST && !self.scope_names.is_empty()
                     {
                         let mut names: Vec<_> = self.scope_names.keys().copied().collect();
@@ -1077,6 +1100,7 @@ impl ScopeContext {
     #[cfg(feature = "vic3")]
     pub fn get_add_modifier_multiplier_context(&self, key: &Token) -> Self {
         let mut sc = self.get_multiplier_context(key);
+        sc.review_missing_scopes = self.review_missing_scopes;
         // The engine preserves the journal entry supplied to a JE when evaluating its modifier.
         if let Some(&(idx, Temporary::No)) = self.scope_names.get("journal_entry")
             && let ScopeEntry::Scope(scopes, Reason::Builtin(origin)) = &self.named[idx]

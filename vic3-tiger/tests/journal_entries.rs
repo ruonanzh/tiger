@@ -6,6 +6,20 @@ use serde::Deserialize;
 
 const ENTRY_PATH: &str = "common/journal_entries/test_outcomes.txt";
 
+const LANGUAGES: [&str; 11] = [
+    "braz_por",
+    "english",
+    "french",
+    "german",
+    "japanese",
+    "korean",
+    "polish",
+    "russian",
+    "simp_chinese",
+    "spanish",
+    "turkish",
+];
+
 const JOURNAL_ENTRY: &str = r"je_tiger_test = {
     activation_description = { always = yes }
     timeout = 30
@@ -36,6 +50,7 @@ const LOCALIZATION: &str = r#" je_tiger_test: "Test entry"
 #[derive(Debug, Deserialize)]
 struct Report {
     key: String,
+    severity: String,
     message: String,
     locations: Vec<Location>,
 }
@@ -105,19 +120,7 @@ fn setup() -> (tempfile::TempDir, PathBuf, PathBuf) {
         }"#,
     );
 
-    for lang in [
-        "braz_por",
-        "english",
-        "french",
-        "german",
-        "japanese",
-        "korean",
-        "polish",
-        "russian",
-        "simp_chinese",
-        "spanish",
-        "turkish",
-    ] {
+    for lang in LANGUAGES {
         write_file(
             &mod_dir,
             &format!("localization/{lang}/outcomes_l_{lang}.yml"),
@@ -427,4 +430,284 @@ batch4_multiplier.1 = {
         }),
         "missing strict-scope diagnostic for the unrelated event multiplier: {reports:#?}"
     );
+}
+
+#[test]
+fn outcome_scopes_from_unconditional_immediate_saves() {
+    let (_fixture, game, mod_dir) = setup();
+    write_file(&game, "game/common/country_definitions/test_countries.txt", "\u{feff}GBR = {}");
+
+    let valid = JOURNAL_ENTRY
+        .replace(
+            "timeout = 30",
+            "timeout = 30
+    immediate = {
+        c:GBR = { save_scope_as = je_saved_tag }
+        root = { save_scope_as = je_saved_root }
+        save_scope_as = je_saved_current
+    }",
+        )
+        .replace(
+            "trigger = { always = yes }",
+            "trigger = {
+            scope:je_saved_tag ?= { is_subject = yes }
+            is_subject_of_and_not_being_freed = scope:je_saved_root
+            is_subject_of_and_not_being_freed = scope:je_saved_current
+        }",
+        )
+        .replace("set_variable = tiger_timed_out", "leave_plays_supporting = scope:je_saved_root");
+
+    let reports = validate(&game, &mod_dir, &valid);
+    assert!(reports.is_empty(), "{reports:#?}");
+
+    let wrong_type = valid.replace(
+        "is_subject_of_and_not_being_freed = scope:je_saved_root",
+        "war_may_restore_country = scope:je_saved_root",
+    );
+    let reports = validate(&game, &mod_dir, &wrong_type);
+    expect_report(&reports, "scopes", "expected country definition", 15);
+
+    let restored = validate(&game, &mod_dir, &valid);
+    assert!(restored.is_empty(), "{restored:#?}");
+}
+
+#[test]
+fn outcome_scopes_do_not_inherit_dynamic_or_unrelated_saves() {
+    let (_fixture, game, mod_dir) = setup();
+    write_file(&game, "game/common/country_definitions/test_countries.txt", "\u{feff}GBR = {}");
+    for lang in LANGUAGES {
+        write_file(
+            &mod_dir,
+            &format!("localization/{lang}/isolation_l_{lang}.yml"),
+            &format!(
+                "\u{feff}l_{lang}:\n je_tiger_other: \"Other entry\"\n je_tiger_other_reason: \"Other reason\""
+            ),
+        );
+    }
+
+    let main = JOURNAL_ENTRY
+        .replace(
+            "timeout = 30",
+            "timeout = 30
+    immediate = {
+        if = {
+            limit = { is_subject = yes }
+            ruler = { save_scope_as = je_saved_conditional }
+        }
+        every_scope_state = { save_scope_as = je_saved_iterator }
+        c:GBR = { save_scope_as = je_saved_tag }
+        save_scope_as = je_saved_cleared
+        clear_saved_scope = je_saved_cleared
+        save_temporary_scope_as = je_saved_temporary
+        save_scope_as = je_saved_overwritten
+        if = {
+            limit = { is_subject = yes }
+            capital = { save_scope_as = je_saved_overwritten }
+        }
+    }",
+        )
+        .replace(
+            "trigger = { always = yes }",
+            "trigger = {
+            is_subject_of_and_not_being_freed = scope:je_saved_conditional
+            is_subject_of_and_not_being_freed = scope:je_saved_iterator
+            is_subject_of_and_not_being_freed = scope:je_saved_missing
+            is_subject_of_and_not_being_freed = scope:je_saved_other
+            is_subject_of_and_not_being_freed = scope:je_saved_tag
+            is_subject_of_and_not_being_freed = scope:je_saved_cleared
+            is_subject_of_and_not_being_freed = scope:je_saved_temporary
+            scope:je_saved_overwritten ?= { is_subject = yes }
+        }",
+        )
+        .replace(
+            "effect = { set_variable = tiger_completed }",
+            "effect = { ruler = { save_scope_as = je_saved_sibling } }",
+        )
+        .replace(
+            "effect = { set_variable = tiger_timed_out }",
+            "effect = {
+            leave_plays_supporting = scope:je_saved_sibling
+            if = {
+                limit = { scope:je_saved_overwritten ?= { is_incorporated = yes } }
+                set_variable = tiger_visited
+            }
+            if = {
+                limit = { exists = scope:je_saved_guarded }
+                leave_plays_supporting = scope:je_saved_guarded
+            }
+        }",
+        );
+    let other = "je_tiger_other = {
+    immediate = { ruler = { save_scope_as = je_saved_other } }
+}
+";
+
+    for script in [format!("{main}{other}"), format!("{other}{main}")] {
+        let reports = validate(&game, &mod_dir, &script);
+        for name in [
+            "je_saved_conditional",
+            "je_saved_iterator",
+            "je_saved_missing",
+            "je_saved_other",
+            "je_saved_sibling",
+            "je_saved_tag",
+            "je_saved_cleared",
+            "je_saved_temporary",
+        ] {
+            let marker = format!("= scope:{name}");
+            let line = script.lines().position(|line| line.contains(&marker)).unwrap() + 1;
+            expect_report(
+                &reports,
+                "strict-scopes",
+                &format!("scope:{name} might not be available here"),
+                line,
+            );
+        }
+        assert_eq!(reports.len(), 8, "{reports:#?}");
+        assert!(
+            reports.iter().all(|report| {
+                matches!(report.severity.as_str(), "tips" | "untidy" | "warning")
+            }),
+            "{reports:#?}"
+        );
+    }
+}
+
+#[test]
+fn global_journal_entry_activation_scopes_reach_involved_outcomes() {
+    let (_fixture, game, mod_dir) = setup();
+    write_file(&game, "game/common/country_definitions/test_countries.txt", "\u{feff}GBR = {}");
+
+    let valid = r"je_tiger_test = {
+    context = none
+    timeout = 30
+    immediate = {
+        scope:journal_entry = { save_scope_as = je_saved_entry }
+    }
+    immediate_all_involved = { save_scope_as = je_saved_participant }
+    outcome = {
+        flags = { hidden timeout }
+        conclusion_desc = je_tiger_test_conclusion
+        effect = {
+            scope:je_saved_entry = { add_involved_country = c:GBR }
+        }
+        effect_all_involved = {
+            scope:je_saved_entry = { add_involved_country = root }
+            leave_plays_supporting = root
+        }
+    }
+}
+";
+    let reports = validate(&game, &mod_dir, valid);
+    assert!(reports.is_empty(), "{reports:#?}");
+
+    let broken = valid
+        .replace("add_involved_country = c:GBR", "leave_plays_supporting = c:GBR")
+        .replace("leave_plays_supporting = root", "leave_plays_supporting = scope:je_saved_entry")
+        .replace(
+            "effect = {",
+            "effect = {
+            scope:je_saved_participant = { leave_plays_supporting = c:GBR }",
+        );
+    let reports = validate(&game, &mod_dir, &broken);
+    expect_report(
+        &reports,
+        "strict-scopes",
+        "scope:je_saved_participant might not be available here",
+        12,
+    );
+    expect_report(&reports, "scopes", "scope seems to be journal entry", 13);
+    expect_report(&reports, "scopes", "produces journal entry but expected country", 17);
+}
+
+#[test]
+fn outcome_scopes_from_optional_root_and_custom_tooltip() {
+    let (_fixture, game, mod_dir) = setup();
+    let valid = JOURNAL_ENTRY
+        .replace(
+            "timeout = 30",
+            "timeout = 30
+    immediate = {
+        root ?= { save_scope_as = je_saved_optional_root }
+        custom_tooltip = {
+            text = je_tiger_test_reason
+            save_scope_as = je_saved_tooltip
+        }
+    }",
+        )
+        .replace(
+            "trigger = { always = yes }",
+            "trigger = {
+            is_subject_of_and_not_being_freed = scope:je_saved_optional_root
+            is_subject_of_and_not_being_freed = scope:je_saved_tooltip
+        }",
+        );
+
+    let reports = validate(&game, &mod_dir, &valid);
+    assert!(reports.is_empty(), "{reports:#?}");
+
+    let broken = valid.replace(
+        "is_subject_of_and_not_being_freed = scope:je_saved_",
+        "war_may_restore_country = scope:je_saved_",
+    );
+    let reports = validate(&game, &mod_dir, &broken);
+    assert_eq!(reports.len(), 2, "{reports:#?}");
+    for line in [16, 17] {
+        expect_report(&reports, "scopes", "produces country but expected country definition", line);
+    }
+}
+
+#[test]
+fn uncertain_je_scope_diagnostics_follow_event_calls() {
+    let (_fixture, game, mod_dir) = setup();
+    write_file(
+        &game,
+        "game/common/static_modifiers/test_modifier.txt",
+        "\u{feff}test_modifier = {}\n",
+    );
+    let events = "events/test_je_event_scopes.txt";
+    write_file(
+        &mod_dir,
+        events,
+        "\u{feff}namespace = je_test_events
+je_test_events.1 = {
+    type = country_event
+    hidden = yes
+    immediate = {
+        leave_plays_supporting = scope:uncertain_je_name
+    }
+}
+je_test_events.2 = {
+    type = country_event
+    hidden = yes
+    immediate = {
+        add_modifier = { name = test_modifier multiplier = scope:uncertain_je_name.var:tiger_value }
+    }
+}
+",
+    );
+    let script = JOURNAL_ENTRY.replace(
+        "timeout = 30",
+        "timeout = 30
+    immediate = { trigger_event = je_test_events.1 }",
+    );
+    let reports = validate(&game, &mod_dir, &script);
+    for (line, severity) in [(6, "warning"), (13, "error")] {
+        assert!(
+            reports.iter().any(|report| {
+                report.key == "strict-scopes"
+                    && report.severity == severity
+                    && report
+                        .message
+                        .contains("scope:uncertain_je_name might not be available here")
+                    && report.locations.first().is_some_and(|location| {
+                        location.from == "MOD"
+                            && location.path.replace('\\', "/") == events
+                            && location.linenr == line
+                    })
+            }),
+            "missing {severity} diagnostic at {events}:{line}\n{reports:#?}"
+        );
+    }
+    assert_eq!(reports.len(), 2, "{reports:#?}");
 }
