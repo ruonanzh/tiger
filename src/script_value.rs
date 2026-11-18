@@ -16,18 +16,34 @@ use crate::token::Token;
 use crate::tooltipped::Tooltipped;
 use crate::trigger::{validate_target_ok_this, validate_trigger, validate_trigger_key_bv};
 use crate::validate::{
-    ListType, precheck_iterator_fields, validate_ifelse_sequence, validate_inside_iterator,
-    validate_iterator_fields, validate_scope_chain,
+    ListType, precheck_iterator_fields, validate_ifelse_sequence,
+    validate_ifelse_sequence_with_sibling_else, validate_inside_iterator, validate_iterator_fields,
+    validate_scope_chain,
 };
 use crate::validator::Validator;
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum ValidationMode {
+    Localized,
+    NoBreakdown,
+    Vic3Progress,
+    Vic3ProgressBranch,
+}
+
+impl ValidationMode {
+    fn nested(self) -> Self {
+        match self {
+            Self::Vic3ProgressBranch => Self::Vic3Progress,
+            mode => mode,
+        }
+    }
+}
 
 /// Validate a block that's part of a script value.
 /// * `have_value`: indicates whether this script value has had some sort of value set already.
 ///   It's used to emit warnings when overwriting this value, or when assuming there is a value
 ///   when there isn't one. Has values `True`, `False`, or `Maybe`.
-/// * `check_desc`: indicates whether localization errors are worth warning about. Some script values
-///   only have their breakdowns displayed while debugging, and those can have raw (non-localized)
-///   text in their descs.
+/// * `mode`: controls breakdown localization and Vic3 scripted progress bar syntax.
 ///
 /// Returns true iff this block did something useful. (Used for warnings)
 fn validate_inner(
@@ -36,9 +52,9 @@ fn validate_inner(
     data: &Everything,
     sc: &mut ScopeContext,
     mut have_value: TriBool,
-    check_desc: bool,
+    mode: ValidationMode,
 ) -> bool {
-    if check_desc {
+    if mode != ValidationMode::NoBreakdown {
         vd.field_item("desc", Item::Localization);
         vd.field_item("format", Item::Localization);
     } else {
@@ -51,7 +67,12 @@ fn validate_inner(
     // Whether the script value's current value has been saved as a scope
     let mut saved_value = false;
 
-    validate_ifelse_sequence(block, "if", "else_if", "else");
+    if mode == ValidationMode::Vic3ProgressBranch {
+        validate_ifelse_sequence_with_sibling_else(block, "if", "else_if", None);
+    } else {
+        validate_ifelse_sequence(block, "if", "else_if", "else");
+    }
+    let mode = mode.nested();
     vd.set_allow_questionmark_equals(true);
     vd.unknown_fields_cmp(|token, cmp, bv| {
         if token.is("save_temporary_scope_as") {
@@ -73,12 +94,12 @@ fn validate_inner(
             }
             have_value = TriBool::True;
             saved_value = false;
-            validate_bv(bv, data, sc, check_desc);
+            validate_bv_with_mode(bv, data, sc, mode);
             made_changes = true;
         } else if token.is("add") || token.is("subtract") || token.is("min") || token.is("max") {
             have_value = TriBool::True;
             saved_value = false;
-            validate_bv(bv, data, sc, check_desc);
+            validate_bv_with_mode(bv, data, sc, mode);
             made_changes = true;
         } else if token.is("multiply")
             || token.is("divide")
@@ -89,7 +110,7 @@ fn validate_inner(
                 let msg = format!("nothing to {token} yet");
                 warn(ErrorKey::Logic).msg(msg).loc(token).push();
             }
-            validate_bv(bv, data, sc, check_desc);
+            validate_bv_with_mode(bv, data, sc, mode);
             made_changes = true;
             saved_value = false;
         } else if token.is("round") || token.is("ceiling") || token.is("floor") || token.is("abs") {
@@ -125,20 +146,25 @@ fn validate_inner(
                 warn(ErrorKey::Logic).msg(msg).loc(token).push();
             }
             if let Some(block) = bv.expect_block() {
-                validate_minmax_range(block, data, sc, check_desc);
+                validate_minmax_range(block, data, sc, mode);
                 made_changes = true;
                 saved_value = false;
             }
             have_value = TriBool::True;
+        } else if mode == ValidationMode::Vic3Progress && token.is("progress_condition") {
+            if let Some(block) = bv.expect_block() {
+                made_changes |= validate_progress_branch(block, data, sc, true);
+            }
+            have_value = TriBool::Maybe;
         } else if token.is("if") || token.is("else_if") {
             if let Some(block) = bv.expect_block() {
-                validate_if(token, block, data, sc, check_desc);
+                validate_if(token, block, data, sc, mode);
                 made_changes = true;
             }
             have_value = TriBool::Maybe;
         } else if token.is("else") {
             if let Some(block) = bv.expect_block() {
-                validate_else(token, block, data, sc, check_desc);
+                validate_else(token, block, data, sc, mode);
                 made_changes = true;
             }
             have_value = TriBool::Maybe;
@@ -163,7 +189,7 @@ fn validate_inner(
                             );
                         }
                         let vd = Validator::new(block, data);
-                        made_changes |= validate_inner(vd, block, data, sc, have_value, check_desc);
+                        made_changes |= validate_inner(vd, block, data, sc, have_value, mode);
                     });
                     have_value = TriBool::Maybe;
                 }
@@ -181,7 +207,7 @@ fn validate_inner(
                     if let Some(block) = bv.expect_block() {
                         precheck_iterator_fields(ltype, it_name.as_str(), block, data, sc);
                         sc.open_scope(outscope, token.clone());
-                        validate_iterator(ltype, &it_name, block, data, sc, check_desc);
+                        validate_iterator(ltype, &it_name, block, data, sc, mode);
                         made_changes = true;
                         sc.close();
                         have_value = TriBool::Maybe;
@@ -197,7 +223,7 @@ fn validate_inner(
             {
                 sc.finalize_builder();
                 let vd = Validator::new(block, data);
-                made_changes |= validate_inner(vd, block, data, sc, have_value, check_desc);
+                made_changes |= validate_inner(vd, block, data, sc, have_value, mode);
                 have_value = TriBool::Maybe;
             }
             sc.close();
@@ -214,7 +240,7 @@ fn validate_iterator(
     block: &Block,
     data: &Everything,
     sc: &mut ScopeContext,
-    check_desc: bool,
+    mode: ValidationMode,
 ) {
     let mut side_effects = false;
     let mut vd = Validator::new(block, data);
@@ -235,7 +261,7 @@ fn validate_iterator(
         Tooltipped::No,
     );
 
-    side_effects |= validate_inner(vd, block, data, sc, TriBool::Maybe, check_desc);
+    side_effects |= validate_inner(vd, block, data, sc, TriBool::Maybe, mode);
     if !side_effects {
         let msg = "this iterator does not change the script value";
         let info = "it should be either removed, or changed to do something useful";
@@ -249,16 +275,16 @@ fn validate_minmax_range(
     block: &Block,
     data: &Everything,
     sc: &mut ScopeContext,
-    check_desc: bool,
+    mode: ValidationMode,
 ) {
     let mut vd = Validator::new(block, data);
     vd.req_field("min");
     vd.req_field("max");
     vd.multi_field_validated("min", |bv, data| {
-        validate_bv(bv, data, sc, check_desc);
+        validate_bv_with_mode(bv, data, sc, mode);
     });
     vd.multi_field_validated("max", |bv, data| {
-        validate_bv(bv, data, sc, check_desc);
+        validate_bv_with_mode(bv, data, sc, mode);
     });
 }
 
@@ -269,7 +295,7 @@ fn validate_if(
     block: &Block,
     data: &Everything,
     sc: &mut ScopeContext,
-    check_desc: bool,
+    mode: ValidationMode,
 ) {
     let mut side_effects = false;
     let mut vd = Validator::new(block, data);
@@ -277,7 +303,7 @@ fn validate_if(
     vd.field_validated_block("limit", |block, data| {
         side_effects |= validate_trigger(block, data, sc, Tooltipped::No);
     });
-    side_effects |= validate_inner(vd, block, data, sc, TriBool::Maybe, check_desc);
+    side_effects |= validate_inner(vd, block, data, sc, TriBool::Maybe, mode);
 
     if !side_effects {
         let msg = format!("this `{key}` does not change the script value");
@@ -294,7 +320,7 @@ fn validate_else(
     block: &Block,
     data: &Everything,
     sc: &mut ScopeContext,
-    check_desc: bool,
+    mode: ValidationMode,
 ) {
     let mut side_effects = false;
     let mut vd = Validator::new(block, data);
@@ -304,7 +330,7 @@ fn validate_else(
         tips(ErrorKey::IfElse).msg(msg).info(info).loc(key).push();
         side_effects |= validate_trigger(block, data, sc, Tooltipped::No);
     });
-    side_effects |= validate_inner(vd, block, data, sc, TriBool::Maybe, check_desc);
+    side_effects |= validate_inner(vd, block, data, sc, TriBool::Maybe, mode);
 
     if !side_effects {
         let msg = format!("this `{key}` does not change the script value");
@@ -314,11 +340,34 @@ fn validate_else(
     }
 }
 
+/// A scripted progress condition has an inline fallback that may itself have a limit and fallback.
+fn validate_progress_branch(
+    block: &Block,
+    data: &Everything,
+    sc: &mut ScopeContext,
+    require_limit: bool,
+) -> bool {
+    let mut vd = Validator::new(block, data);
+    if require_limit {
+        vd.req_field_warn("limit");
+    }
+    vd.field_trigger("limit", Tooltipped::No, sc);
+    vd.field_block("else");
+    let made_changes =
+        validate_inner(vd, block, data, sc, TriBool::Maybe, ValidationMode::Vic3ProgressBranch);
+
+    let mut fallback_changes = false;
+    for fallback in block.get_field_blocks("else") {
+        fallback_changes |= validate_progress_branch(fallback, data, sc, false);
+    }
+    made_changes || fallback_changes
+}
+
 /// Validate a script value. It can be a block or a value.
 /// As a value, it may be an integer or boolean literal, or a target scope sequence, or a named script value.
 /// As a block, it may be a { min max } range, or a calculation block which is validated with `validate_inner`.
 /// (Boolean script values are rare but valid. They can't have calculation blocks.)
-pub(crate) fn validate_bv(bv: &BV, data: &Everything, sc: &mut ScopeContext, check_desc: bool) {
+fn validate_bv_with_mode(bv: &BV, data: &Everything, sc: &mut ScopeContext, mode: ValidationMode) {
     // Using validate_target_ok_this here because when chaining script values to each other, you often do `value = this`
     match bv {
         BV::Value(t) => {
@@ -337,19 +386,24 @@ pub(crate) fn validate_bv(bv: &BV, data: &Everything, sc: &mut ScopeContext, che
                     warn(ErrorKey::Validation).msg("invalid script value range").loc(b).push();
                 }
             } else {
-                validate_inner(vd, b, data, sc, TriBool::False, check_desc);
+                validate_inner(vd, b, data, sc, TriBool::False, mode);
             }
         }
     }
 }
 
 pub fn validate_script_value(bv: &BV, data: &Everything, sc: &mut ScopeContext) {
-    validate_bv(bv, data, sc, true);
+    validate_bv_with_mode(bv, data, sc, ValidationMode::Localized);
 }
 
 #[allow(dead_code)]
 pub fn validate_script_value_no_breakdown(bv: &BV, data: &Everything, sc: &mut ScopeContext) {
-    validate_bv(bv, data, sc, false);
+    validate_bv_with_mode(bv, data, sc, ValidationMode::NoBreakdown);
+}
+
+#[cfg(feature = "vic3")]
+pub(crate) fn validate_scripted_progress(bv: &BV, data: &Everything, sc: &mut ScopeContext) {
+    validate_bv_with_mode(bv, data, sc, ValidationMode::Vic3Progress);
 }
 
 /// Validate a script value that's not allowed to do calculations. It must be a literal or the name of another script value

@@ -1,6 +1,6 @@
 mod activation;
 
-use crate::block::Block;
+use crate::block::{BV, Block};
 use crate::context::ScopeContext;
 use crate::data::on_actions::validate_on_action;
 use crate::db::{Db, DbKind};
@@ -63,6 +63,14 @@ impl DbKind for JournalEntry {
         let mut outcome_sc = sc.clone();
         let mut outcome_country_sc = country_sc.clone();
         vd.field_item("group", Item::JournalEntryGroup);
+        vd.field_validated("dlc", |bv, data| match bv {
+            BV::Value(token) => data.verify_exists(Item::Dlc, token),
+            BV::Block(block) => {
+                for token in block.iter_values_warn() {
+                    data.verify_exists(Item::Dlc, token);
+                }
+            }
+        });
 
         vd.field_item("icon", Item::File);
 

@@ -55,7 +55,7 @@ impl DbKind for ScriptedProgressBar {
         }
 
         for field in &["weekly_progress", "monthly_progress", "yearly_progress"] {
-            vd.field_script_value_rooted(field, Scopes::Country);
+            vd.field_scripted_progress(field);
         }
     }
 }

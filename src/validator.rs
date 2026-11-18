@@ -17,6 +17,8 @@ use crate::lowercase::Lowercase;
 use crate::report::fatal;
 use crate::report::{ErrorKey, Severity, report};
 use crate::scopes::Scopes;
+#[cfg(feature = "vic3")]
+use crate::script_value::validate_scripted_progress;
 #[cfg(feature = "jomini")]
 use crate::script_value::{validate_script_value, validate_script_value_no_breakdown};
 use crate::special_tokens::SpecialTokens;
@@ -1027,6 +1029,16 @@ impl<'a> Validator<'a> {
             let mut sc = ScopeContext::new(scopes, key);
             // TODO: pass max_severity value down
             validate_script_value(bv, self.data, &mut sc);
+        })
+    }
+
+    /// Validate a Victoria 3 scripted progress bar's periodic update.
+    #[cfg(feature = "vic3")]
+    pub(crate) fn field_scripted_progress(&mut self, name: &str) -> bool {
+        self.field_check(name, AllowInject::Yes, |key, bv| {
+            let mut sc = ScopeContext::new(Scopes::Country, key);
+            sc.define_name("journal_entry", Scopes::JournalEntry, key);
+            validate_scripted_progress(bv, self.data, &mut sc);
         })
     }
 

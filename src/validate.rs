@@ -1014,6 +1014,15 @@ pub fn validate_scope_chain(
 }
 
 pub fn validate_ifelse_sequence(block: &Block, key_if: &str, key_elseif: &str, key_else: &str) {
+    validate_ifelse_sequence_with_sibling_else(block, key_if, key_elseif, Some(key_else));
+}
+
+pub(crate) fn validate_ifelse_sequence_with_sibling_else(
+    block: &Block,
+    key_if: &str,
+    key_elseif: &str,
+    key_else: Option<&str>,
+) {
     let mut seen_if = false;
     for (key, block) in block.iter_definitions() {
         if key.is(key_if) {
@@ -1026,7 +1035,7 @@ pub fn validate_ifelse_sequence(block: &Block, key_if: &str, key_elseif: &str, k
             }
             seen_if = true;
             continue;
-        } else if key.is(key_else) {
+        } else if let Some(key_else) = key_else.filter(|key_else| key.is(key_else)) {
             if !seen_if {
                 let msg = format!("`{key_else} without preceding `{key_if}`");
                 warn(ErrorKey::IfElse).msg(msg).loc(key).push();

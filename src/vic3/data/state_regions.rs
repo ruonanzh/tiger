@@ -3,6 +3,7 @@ use crate::db::{Db, DbKind};
 use crate::everything::Everything;
 use crate::game::GameFlags;
 use crate::item::{Item, ItemLoader};
+use crate::report::{ErrorKey, err};
 use crate::token::Token;
 use crate::validator::Validator;
 
@@ -73,6 +74,17 @@ impl DbKind for StateRegion {
         vd.field_list_items("impassable", Item::Province);
         vd.field_list_items("prime_land", Item::Province);
         vd.field_item("center_province", Item::Province);
+
+        let min_cold = vd.field_value("min_cold_effect").and_then(Token::expect_number);
+        if let Some(max_token) = vd.field_value("max_cold_effect")
+            && let Some(max_cold) = max_token.expect_number()
+            && min_cold.is_some_and(|min| max_cold < min)
+        {
+            err(ErrorKey::Validation)
+                .msg("max_cold_effect must be at least min_cold_effect")
+                .loc(max_token)
+                .push();
+        }
 
         vd.field_validated_block("blockade_locator", |block, data| {
             let mut vd = Validator::new(block, data);
