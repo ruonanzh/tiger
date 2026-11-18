@@ -2983,6 +2983,7 @@ dependencies = [
  "criterion",
  "serde",
  "serde_json",
+ "tempfile",
  "tiger-bin-shared",
  "tiger-lib",
  "toml",

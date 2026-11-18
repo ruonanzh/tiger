@@ -63,6 +63,60 @@ impl DbKind for JournalEntry {
 
         vd.multi_field_item("scripted_button", Item::ScriptedButton);
 
+        vd.field_trigger("activation_description", Tooltipped::Yes, &mut sc);
+        let mut unique_flags = Vec::new();
+        vd.multi_field_validated_block("outcome", |outcome, data| {
+            let mut vd = Validator::new(outcome, data);
+            let flags = outcome.get_field_block("flags");
+            let flag_token = |name: &str| flags.and_then(|b| b.iter_values().find(|t| t.is(name)));
+
+            for flag in ["invalid_outcome", "timeout"] {
+                if let Some(token) = flag_token(flag) {
+                    if unique_flags.contains(&flag) {
+                        let msg = format!(
+                            "only one outcome per journal entry can have the `{flag}` flag"
+                        );
+                        err(ErrorKey::Validation).msg(msg).loc(token).push();
+                    } else {
+                        unique_flags.push(flag);
+                    }
+                }
+            }
+            if flag_token("hidden").is_none() {
+                vd.req_field("header");
+                vd.req_field("effect_header");
+                if let Some(token) = flag_token("invalid_outcome") {
+                    err(ErrorKey::Validation)
+                        .msg("an invalid_outcome must also have the `hidden` flag")
+                        .loc(token)
+                        .push();
+                }
+            }
+            vd.req_field("conclusion_desc");
+            vd.field_localization("header", &mut sc);
+            vd.field_localization("effect_header", &mut sc);
+            vd.field_localization("conclusion_desc", &mut sc);
+            vd.field_value("color");
+            vd.field_list_choice(
+                "flags",
+                &["hidden", "timeout", "invalid_outcome", "fails_subgoal", "historical"],
+            );
+            if flag_token("timeout").is_some() {
+                vd.ban_field("trigger", || "outcomes without the `timeout` flag");
+            } else {
+                vd.req_field("trigger");
+                vd.field_trigger("trigger", Tooltipped::Yes, &mut sc);
+            }
+            vd.field_effect("effect", Tooltipped::Yes, &mut sc);
+            vd.field_effect("effect_all_involved", Tooltipped::No, &mut country_sc);
+            vd.multi_field_validated_sc("event_outcome_desc", &mut sc, validate_desc);
+            vd.multi_field_validated_block_sc(
+                "event_outcome_effect_desc",
+                &mut sc,
+                validate_effect_desc,
+            );
+        });
+
         vd.field_trigger("possible", Tooltipped::Yes, &mut sc);
         vd.field_effect("immediate", Tooltipped::No, &mut sc);
         vd.field_effect("immediate_all_involved", Tooltipped::No, &mut country_sc);
