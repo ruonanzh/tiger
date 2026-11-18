@@ -36,14 +36,17 @@ impl DbKind for JournalEntry {
         let loca = format!("{key}_goal");
         data.mark_used(Item::Localization, &loca);
 
-        let sc_context = if let Some(group) = block.get_field_value("group") {
-            if data.item_has_property(Item::JournalEntryGroup, group.as_str(), "none_context") {
+        vd.field_choice("context", &["none", "country"]);
+        let sc_context = match block.get_field_value("context").map(Token::as_str) {
+            Some("country") => Scopes::Country,
+            Some("none") => Scopes::None,
+            _ if block.get_field_value("group").is_some_and(|group| {
+                data.item_has_property(Item::JournalEntryGroup, group.as_str(), "none_context")
+            }) =>
+            {
                 Scopes::None
-            } else {
-                Scopes::Country
             }
-        } else {
-            Scopes::Country
+            _ => Scopes::Country,
         };
         let mut sc = ScopeContext::new(sc_context, key);
         sc.define_name("journal_entry", Scopes::JournalEntry, key);

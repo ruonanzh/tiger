@@ -993,6 +993,21 @@ fn match_trigger_bv(
                         }
                     }
                 }
+            } else if name.is("current_career_length") {
+                #[cfg(feature = "vic3")]
+                if let Some(block) = bv.expect_block() {
+                    let mut vd = Validator::new(block, data);
+                    vd.set_max_severity(max_sev);
+                    if let Some(role) = vd.field_value("role")
+                        && !data.item_exists(Item::CharacterRole, role.as_str())
+                        && !data.item_exists(Item::CharacterArchetype, role.as_str())
+                    {
+                        let msg =
+                            format!("`{role}` not found as character role or character archetype");
+                        err(ErrorKey::MissingItem).msg(msg).loc(role).push();
+                    }
+                    crate::validate::validate_mandatory_duration(block, &mut vd, sc);
+                }
             } else if name.is("has_local_variable") {
                 if let Some(token) = bv.expect_value() {
                     sc.exists_local(token.as_str(), token);

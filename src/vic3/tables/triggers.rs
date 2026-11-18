@@ -167,6 +167,7 @@ const TRIGGER: &[(Scopes, &str, Trigger)] = &[
             ("?second_state", Scope(Scopes::State)),
         ]),
     ),
+    (Scopes::Country, "can_start_play_against_overlord", Boolean),
     (Scopes::None, "can_start_tutorial_lesson", Item(Item::TutorialLesson)),
     (
         Scopes::Country,
@@ -353,6 +354,7 @@ const TRIGGER: &[(Scopes, &str, Trigger)] = &[
         Block(&[("target", Scope(Scopes::Country)), ("value", CompareValue)]),
     ),
     (Scopes::Culture, "culture_target_fervor", CompareValue),
+    (Scopes::Character, "current_career_length", Special),
     (Scopes::PowerBloc, "current_cohesion_number", CompareValue),
     (Scopes::PowerBloc, "current_cohesion_percentage", CompareValue),
     (Scopes::Country, "current_law_enactment_score", CompareValue),

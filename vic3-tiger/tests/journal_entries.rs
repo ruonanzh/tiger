@@ -296,3 +296,135 @@ fn population_and_country_outcome_arguments() {
     let repaired = validate(&game, &mod_dir, &script);
     assert!(repaired.is_empty(), "{repaired:#?}");
 }
+
+#[test]
+fn entry_context_overrides_the_group_in_both_directions() {
+    let (_fixture, game, mod_dir) = setup();
+    write_file(
+        &game,
+        "game/common/journal_entry_groups/test_groups.txt",
+        "\u{feff}global_group = { context = none }\ncountry_group = { context = country }",
+    );
+    for (group, context, expects_country) in [
+        ("global_group", "context = country", true),
+        ("global_group", "", false),
+        ("country_group", "context = none", false),
+        ("country_group", "", true),
+    ] {
+        let script = format!(
+            "je_tiger_test = {{\n group = {group}\n {context}\n possible = {{ is_subject = yes }}\n}}"
+        );
+        let reports = validate(&game, &mod_dir, &script);
+        if expects_country {
+            assert!(reports.is_empty(), "{reports:#?}");
+        } else {
+            expect_report(&reports, "scopes", "scope seems to be none", 4);
+        }
+    }
+    let reports = validate(&game, &mod_dir, "je_tiger_test = {\n context = typo\n}");
+    expect_report(&reports, "choice", "expected one of", 2);
+}
+
+#[test]
+fn subject_play_and_career_length_triggers() {
+    let (_fixture, game, mod_dir) = setup();
+    write_file(
+        &game,
+        "game/common/character_roles/test_roles.txt",
+        "\u{feff}character_role_favorite = { type = politician }\n",
+    );
+    let valid = JOURNAL_ENTRY.replace(
+        "trigger = { always = yes }",
+        "trigger = {
+            can_start_play_against_overlord = yes
+            can_start_play_against_overlord = no
+            ruler = {
+                current_career_length = { role = character_role_favorite months = 12 }
+                current_career_length = { role = general years = 10 }
+                current_career_length = { months = 12 }
+            }
+        }",
+    );
+    let reports = validate(&game, &mod_dir, &valid);
+    assert!(reports.is_empty(), "{reports:#?}");
+
+    let invalid = valid
+        .replace("can_start_play_against_overlord = no", "can_start_play_against_overlord = maybe")
+        .replace("role = general years = 10", "role = nonexistent years = 10")
+        .replace("current_career_length = { months = 12 }", "current_career_length = { }");
+    let reports = validate(&game, &mod_dir, &invalid);
+    expect_report(&reports, "unknown-field", "unknown token `maybe`", 10);
+    expect_report(
+        &reports,
+        "missing-item",
+        "not found as character role or character archetype",
+        13,
+    );
+    expect_report(&reports, "field-missing", "must have 1 of", 14);
+}
+
+#[test]
+fn journal_entry_modifier_multiplier_scope() {
+    let (_fixture, game, mod_dir) = setup();
+    write_file(
+        &game,
+        "game/common/static_modifiers/test_modifier.txt",
+        "\u{feff}test_modifier = {}\n",
+    );
+    let script = JOURNAL_ENTRY.replacen(
+        "effect = { set_variable = tiger_completed }",
+        r"effect = {
+            add_modifier = {
+                name = test_modifier
+                multiplier = scope:journal_entry.var:tiger_value
+            }
+            ruler = {
+                add_modifier = {
+                    name = test_modifier
+                    multiplier = { value = scope:journal_entry.var:tiger_value }
+                }
+            }
+        }",
+        1,
+    );
+    let reports = validate(&game, &mod_dir, &script);
+    assert!(reports.is_empty(), "{reports:#?}");
+
+    let typo = script.replacen(
+        "scope:journal_entry.var:tiger_value",
+        "scope:journal_entyr.var:tiger_value",
+        1,
+    );
+    let reports = validate(&game, &mod_dir, &typo);
+    expect_report(&reports, "strict-scopes", "scope:journal_entyr might not be available here", 12);
+
+    let outside_path = "events/batch4_multiplier.txt";
+    write_file(
+        &mod_dir,
+        outside_path,
+        "\u{feff}namespace = batch4_multiplier
+batch4_multiplier.1 = {
+    type = country_event
+    hidden = yes
+    immediate = {
+        add_modifier = {
+            name = test_modifier
+            multiplier = scope:journal_entry.var:tiger_value
+        }
+    }
+}",
+    );
+    let reports = validate(&game, &mod_dir, &script);
+    assert!(
+        reports.iter().any(|report| {
+            report.key == "strict-scopes"
+                && report.message.contains("scope:journal_entry might not be available here")
+                && report.locations.iter().any(|location| {
+                    location.from == "MOD"
+                        && location.path.replace('\\', "/") == outside_path
+                        && location.linenr == 8
+                })
+        }),
+        "missing strict-scope diagnostic for the unrelated event multiplier: {reports:#?}"
+    );
+}

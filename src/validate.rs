@@ -462,6 +462,24 @@ pub fn validate_inside_iterator(
     vd: &mut Validator,
     tooltipped: Tooltipped,
 ) {
+    #[cfg(feature = "vic3")]
+    if Game::is_vic3() && listtype == ListType::Any {
+        vd.field_bool("list_scopes");
+        vd.field_bool("show_trigger_per_scope");
+
+        let option = |name| {
+            block.iter_assignments().find(|(key, _)| key.lowercase_is(name)).map(|(_, value)| value)
+        };
+        if let Some(show) = option("show_trigger_per_scope")
+            && show.lowercase_is("yes")
+            && option("list_scopes").is_none_or(|list| list.lowercase_is("no"))
+        {
+            let msg = "`show_trigger_per_scope` is only used when `list_scopes = yes` is also set";
+            let severity = Severity::Warning.at_most(vd.max_severity());
+            report(ErrorKey::Validation, severity).msg(msg).loc(show).push();
+        }
+    }
+
     // Docs say that all three can take either list or variable, but global and local lists must be variable lists.
     #[cfg(feature = "jomini")]
     if name == "in_list" {

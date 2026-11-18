@@ -98,8 +98,9 @@ pub fn validate_add_modifier(
                 let value = vd.value();
                 data.validate_call(Item::Modifier, value, &Block::new(value.loc), sc);
             });
-            // multiplier executes in root scope. This is probably a bug
-            vd.field_script_value_builder("multiplier", |key| sc.get_multiplier_context(key));
+            vd.field_script_value_builder("multiplier", |key| {
+                sc.get_add_modifier_multiplier_context(key)
+            });
             validate_optional_duration(&mut vd, sc);
             vd.field_bool("is_decaying");
         }

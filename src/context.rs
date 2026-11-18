@@ -1074,6 +1074,19 @@ impl ScopeContext {
         sc
     }
 
+    #[cfg(feature = "vic3")]
+    pub fn get_add_modifier_multiplier_context(&self, key: &Token) -> Self {
+        let mut sc = self.get_multiplier_context(key);
+        // The engine preserves the journal entry supplied to a JE when evaluating its modifier.
+        if let Some(&(idx, Temporary::No)) = self.scope_names.get("journal_entry")
+            && let ScopeEntry::Scope(scopes, Reason::Builtin(origin)) = &self.named[idx]
+            && *scopes == Scopes::JournalEntry
+        {
+            sc.define_name("journal_entry", Scopes::JournalEntry, origin);
+        }
+        sc
+    }
+
     /// Return the possible scope types of `root`, and the reason why we think it has those types
     fn resolve_root(&self) -> (Scopes, &Reason) {
         match self.root {
