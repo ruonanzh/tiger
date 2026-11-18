@@ -631,6 +631,15 @@ const TRIGGER: &[(Scopes, &str, Trigger)] = &[
         Removed("1.9", "replaced with world market system"),
     ),
     (Scopes::Character, "has_military_formation", Boolean),
+    (
+        Scopes::Country,
+        "has_military_reach",
+        Block(&[
+            ("target", Scope(Scopes::State.union(Scopes::Country))),
+            ("min_reach", SetValue),
+            ("?min_shippable_strength", SetValue),
+        ]),
+    ),
     (Scopes::MilitaryFormation, "has_mobilization_option", Scope(Scopes::MobilizationOption)),
     (Scopes::State, "has_mobilizing_unit", Boolean),
     (

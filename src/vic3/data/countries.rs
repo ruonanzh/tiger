@@ -3,6 +3,7 @@ use crate::context::ScopeContext;
 use crate::db::{Db, DbKind};
 use crate::everything::Everything;
 use crate::game::GameFlags;
+use crate::helpers::{AllowInject, TigerHashMap, dup_assign_error};
 use crate::item::{Item, ItemLoader};
 use crate::modif::validate_modifs;
 use crate::scopes::Scopes;
@@ -43,6 +44,19 @@ impl DbKind for Country {
         vd.field_item("capital", Item::StateRegion);
         vd.field_bool("is_named_from_capital");
         vd.field_bool("dynamic_country_definition");
+        vd.field_validated_block("regnal_numbers", |block, data| {
+            let mut vd = Validator::new(block, data);
+            let mut names = TigerHashMap::default();
+            vd.unknown_value_fields(|name, value| {
+                if let Some(first) = names.get(name.as_str()) {
+                    dup_assign_error(name, first, AllowInject::No);
+                } else {
+                    names.insert(name.as_str(), name.clone());
+                }
+                data.verify_exists(Item::Localization, name);
+                value.expect_integer();
+            });
+        });
 
         vd.field_validated("primary_unit_color", validate_possibly_named_color);
         vd.field_validated("secondary_unit_color", validate_possibly_named_color);
