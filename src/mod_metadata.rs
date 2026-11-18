@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 
-use crate::block::Block;
+use crate::block::{Block, BlockItem};
 use crate::fileset::{FileEntry, FileKind, FileStage};
 use crate::parse::json::parse_json_file;
 use crate::token::Token;
@@ -26,8 +26,14 @@ impl ModMetadata {
         let pathname = fix_slashes_for_target_platform(mod_dir.join(&in_mod_path));
         let entry =
             FileEntry::new(in_mod_path, FileStage::NoStage, FileKind::Mod, pathname.clone());
-        let block = parse_json_file(&entry)
+        let mut document = parse_json_file(&entry)
             .with_context(|| format!("could not read metadata file {}", pathname.display()))?;
+        // The JSON parser wraps the root object in a document block.
+        let block = document
+            .drain()
+            .next()
+            .and_then(BlockItem::expect_into_block)
+            .with_context(|| format!("expected metadata object in {}", pathname.display()))?;
         Ok(Self { modpath: mod_dir.to_path_buf(), block })
     }
 

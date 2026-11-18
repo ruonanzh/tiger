@@ -4,9 +4,9 @@ use crate::data::events::Event;
 use crate::desc::validate_desc;
 use crate::effect::{validate_effect, validate_effect_internal};
 use crate::everything::Everything;
-use crate::item::Item;
+use crate::item::{Item, ItemExt};
 use crate::lowercase::Lowercase;
-use crate::report::{ErrorKey, err};
+use crate::report::{ErrorKey, err, report};
 use crate::scopes::Scopes;
 use crate::special_tokens::SpecialTokens;
 use crate::token::Token;
@@ -70,7 +70,10 @@ pub fn validate_event(event: &Event, data: &Everything, sc: &mut ScopeContext) {
                 data.verify_exists(Item::MediaAlias, token);
             }
         }
-        vd.field_item("texture", Item::File);
+        vd.field_validated_value("texture", |_, mut value| {
+            validate_event_texture(value.value(), data);
+            value.accept();
+        });
         vd.field_item("on_created_soundeffect", Item::Sound);
     });
 
@@ -119,6 +122,41 @@ pub fn validate_event(event: &Event, data: &Everything, sc: &mut ScopeContext) {
         sc.wipe_temporaries();
         validate_effect(block, data, sc, tooltipped);
     });
+}
+
+fn validate_event_texture(token: &Token, data: &Everything) {
+    let name = token.as_str();
+    if let Some((key, alias)) = data.get_key_block(Item::MediaAlias, name) {
+        if let Some(texture) = alias.get_field_value("texture") {
+            let path = texture.as_str();
+            data.mark_used(Item::File, &path.replace("//", "/"));
+            if !data.item_exists(Item::File, path) {
+                let msg = format!("texture file {path} for media alias {name} does not exist");
+                report(ErrorKey::MissingFile, Item::File.severity())
+                    .msg(msg)
+                    .loc(token)
+                    .loc_msg(texture, "texture defined here")
+                    .push();
+            }
+            return;
+        }
+        if !data.item_exists(Item::File, name) {
+            let msg = format!("media alias {name} does not define a texture");
+            report(ErrorKey::MissingItem, Item::MediaAlias.severity())
+                .msg(msg)
+                .loc(token)
+                .loc_msg(key, "media alias defined here")
+                .push();
+            return;
+        }
+    } else if !name.contains('/')
+        && !name.to_ascii_lowercase().ends_with(".dds")
+        && !data.item_exists(Item::File, name)
+    {
+        data.verify_exists(Item::MediaAlias, token);
+        return;
+    }
+    data.verify_exists(Item::File, token);
 }
 
 fn validate_event_option(
