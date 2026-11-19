@@ -209,7 +209,15 @@ impl GuiBlock {
                             err(ErrorKey::WrongGame).weak().msg(msg).loc(key).push();
                         } else {
                             let msg = format!("unknown gui field `{key}`");
-                            err(ErrorKey::UnknownField).weak().msg(msg).loc(key).push();
+                            err(ErrorKey::UnknownField)
+                                .weak()
+                                .msg(msg)
+                                .opt_info(
+                                    (Game::is_vic3() && key_lc == "sstart_sound")
+                                        .then_some("Use start_sound for this GUI property."),
+                                )
+                                .loc(key)
+                                .push();
                         }
                     } else if let Some(key) = item.expect_value() {
                         let key_lc = Lowercase::new(key.as_str());

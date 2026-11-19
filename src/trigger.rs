@@ -25,6 +25,8 @@ use crate::item::Item;
 use crate::lowercase::Lowercase;
 #[cfg(any(feature = "vic3", feature = "imperator"))]
 use crate::modif::verify_modif_exists;
+#[cfg(feature = "vic3")]
+use crate::report::report;
 use crate::report::{ErrorKey, Severity, err, fatal, tips, warn};
 use crate::scopes::{
     ArgumentValue, Scopes, needs_prefix, scope_iterator, scope_prefix, scope_to_scope,
@@ -671,7 +673,9 @@ pub fn validate_trigger_rhs(
 /// The default is that the field is required and may occur only once.
 ///
 /// Returns true iff the trigger had side effects (such as saving scopes).
+#[allow(clippy::too_many_arguments)]
 fn match_trigger_fields(
+    _name: &Token,
     fields: &[(&str, Trigger)],
     block: &Block,
     data: &Everything,
@@ -695,6 +699,28 @@ fn match_trigger_fields(
             vd.req_field(field);
             vd.field_any_cmp(field);
         }
+    }
+
+    #[cfg(feature = "vic3")]
+    if Game::is_vic3() && _name.lowercase_is("country_has_building_group_levels") {
+        vd.unknown_fields_any_cmp(|key, cmp, bv| {
+            let msg = format!("unknown field `{key}`");
+            let building_type_target = key.is("target")
+                && cmp == Comparator::Equals(Single)
+                && bv.get_value().is_some_and(|token| {
+                    token
+                        .split_once(':')
+                        .is_some_and(|(prefix, arg)| prefix.lowercase_is("bt") && !arg.is(""))
+                });
+            report(ErrorKey::UnknownField, Severity::Error.at_most(max_sev))
+                .weak()
+                .msg(msg)
+                .opt_info(building_type_target.then_some(
+                    "Use country_has_building_type_levels as the outer trigger for a bt: target.",
+                ))
+                .loc(key)
+                .push();
+        });
     }
 
     for Field(key, cmp, bv) in block.iter_fields() {
@@ -750,6 +776,21 @@ fn match_trigger_bv(
             }
         }
         Trigger::CompareValue => {
+            #[cfg(feature = "vic3")]
+            if Game::is_vic3()
+                && name.lowercase_is("year")
+                && !matches!(cmp, Comparator::Equals(Question | Double))
+                && let Some(token) = bv.get_value()
+                && let Some(date) = Date::parse_full_calendar_date(token.as_str())
+            {
+                tips(ErrorKey::Validation)
+                    .weak()
+                    .msg(format!("year {cmp} {date} uses a full date"))
+                    .info(format!("Use game_date {cmp} {date} to compare a full date."))
+                    .loc(token)
+                    .push();
+                return false;
+            }
             must_be_eq = false;
             // TODO: check side_effects
             if Game::is_jomini() {
@@ -868,8 +909,9 @@ fn match_trigger_bv(
         }
         Trigger::Block(fields) => {
             if let Some(block) = bv.expect_block() {
-                side_effects |=
-                    match_trigger_fields(fields, block, data, sc, tooltipped, negated, max_sev);
+                side_effects |= match_trigger_fields(
+                    name, fields, block, data, sc, tooltipped, negated, max_sev,
+                );
             }
         }
         #[cfg(any(feature = "ck3", feature = "vic3"))]
@@ -878,24 +920,27 @@ fn match_trigger_bv(
                 validate_target(token, data, sc, *s);
             }
             BV::Block(block) => {
-                side_effects |=
-                    match_trigger_fields(fields, block, data, sc, tooltipped, negated, max_sev);
+                side_effects |= match_trigger_fields(
+                    name, fields, block, data, sc, tooltipped, negated, max_sev,
+                );
             }
         },
         #[cfg(feature = "ck3")]
         Trigger::ItemOrBlock(i, fields) => match bv {
             BV::Value(token) => data.verify_exists_max_sev(*i, token, max_sev),
             BV::Block(block) => {
-                side_effects |=
-                    match_trigger_fields(fields, block, data, sc, tooltipped, negated, max_sev);
+                side_effects |= match_trigger_fields(
+                    name, fields, block, data, sc, tooltipped, negated, max_sev,
+                );
             }
         },
         #[cfg(feature = "ck3")]
         Trigger::IdentifierOrBlock(kind, fields) => match bv {
             BV::Value(token) => validate_identifier(token, kind, Severity::Error),
             BV::Block(block) => {
-                side_effects |=
-                    match_trigger_fields(fields, block, data, sc, tooltipped, negated, max_sev);
+                side_effects |= match_trigger_fields(
+                    name, fields, block, data, sc, tooltipped, negated, max_sev,
+                );
             }
         },
         #[cfg(any(feature = "ck3", feature = "vic3", feature = "eu5"))]
@@ -906,7 +951,7 @@ fn match_trigger_bv(
             }
             BV::Block(b) => {
                 side_effects |=
-                    match_trigger_fields(fields, b, data, sc, tooltipped, negated, max_sev);
+                    match_trigger_fields(name, fields, b, data, sc, tooltipped, negated, max_sev);
             }
         },
         #[cfg(feature = "ck3")]
@@ -1306,8 +1351,9 @@ fn match_trigger_bv(
                     validate_flag_name(token);
                 }
                 BV::Block(block) => {
-                    side_effects |=
-                        match_trigger_fields(fields, block, data, sc, tooltipped, negated, max_sev);
+                    side_effects |= match_trigger_fields(
+                        name, fields, block, data, sc, tooltipped, negated, max_sev,
+                    );
                 }
             }
         }

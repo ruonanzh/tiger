@@ -17,6 +17,30 @@ pub struct Date {
 }
 
 impl Date {
+    #[cfg(feature = "vic3")]
+    pub(crate) fn parse_full_calendar_date(text: &str) -> Option<Self> {
+        let text = text.trim_end();
+        if text.bytes().filter(|&byte| byte == b'.').count() != 2 || text.ends_with('.') {
+            return None;
+        }
+
+        let date: Self = text.parse().ok()?;
+        let leap_year = date.year % 4 == 0 && (date.year % 100 != 0 || date.year % 400 == 0);
+        let days = match date.month {
+            2 => {
+                if leap_year {
+                    29
+                } else {
+                    28
+                }
+            }
+            4 | 6 | 9 | 11 => 30,
+            1 | 3 | 5 | 7 | 8 | 10 | 12 => 31,
+            _ => return None,
+        };
+        (1..=days).contains(&date.day).then_some(date)
+    }
+
     pub fn new(year: i16, month: i8, day: i8) -> Self {
         Date {
             year,

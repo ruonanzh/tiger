@@ -387,6 +387,20 @@ fn validate_bv_with_mode(bv: &BV, data: &Everything, sc: &mut ScopeContext, mode
     // Using validate_target_ok_this here because when chaining script values to each other, you often do `value = this`
     match bv {
         BV::Value(t) => {
+            #[cfg(feature = "vic3")]
+            if crate::Game::is_vic3()
+                && t.lowercase_is("state_exports")
+                && sc.scopes(data) == Scopes::State
+                && !data.script_values.exists(t.as_str())
+            {
+                tips(ErrorKey::Validation)
+                    .weak()
+                    .msg("bare state_exports in a State script value needs runtime review")
+                    .info("The documented State trigger takes a comparison block. Check whether the bare read produces a numeric export total.")
+                    .loc(t)
+                    .push();
+                return;
+            }
             validate_target_ok_this(t, data, sc, Scopes::Value | Scopes::Bool);
         }
         BV::Block(b) => {

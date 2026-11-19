@@ -484,6 +484,19 @@ impl Asset {
             }
             vd.field_numeric("scale");
         });
+        if Game::is_vic3() {
+            vd.multi_field_validated_block("group", |block, data| {
+                let mut vd = Validator::new(block, data);
+                vd.field_value("name");
+                vd.multi_field_validated_block("attach", |block, data| {
+                    let mut vd = Validator::new(block, data);
+                    vd.field_numeric("chance");
+                    vd.unknown_value_fields(|_, token| {
+                        data.verify_exists(Item::Asset, token);
+                    });
+                });
+            });
+        }
         vd.multi_field_validated_block("attach", |block, data| {
             let mut vd = Validator::new(block, data);
             if Game::is_vic3() {

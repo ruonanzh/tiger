@@ -4,7 +4,7 @@ use crate::desc::validate_desc;
 use crate::everything::Everything;
 use crate::helpers::TigerHashSet;
 use crate::item::Item;
-use crate::report::{ErrorKey, ErrorLoc, Severity, err, warn};
+use crate::report::{ErrorKey, ErrorLoc, Severity, err, tips, warn};
 use crate::scopes::Scopes;
 use crate::script_value::validate_script_value;
 use crate::token::Token;
@@ -404,6 +404,15 @@ pub fn validate_create_character(
         vd.ban_field("last_name", || "characters without `name`");
     }
     vd.field_validated_value("culture", |_, mut vd| {
+        if vd.maybe_is("ig_before_random_accepted") {
+            tips(ErrorKey::Validation)
+                .weak()
+                .msg("create_character.culture = ig_before_random_accepted needs runtime review")
+                .info("This alias is documented for character templates. Check whether the effect also honors it.")
+                .loc(vd.value())
+                .push();
+            return;
+        }
         vd.maybe_is("primary_culture");
         vd.item_or_target(sc, Item::Culture, Scopes::Culture);
     });

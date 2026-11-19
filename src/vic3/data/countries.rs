@@ -6,6 +6,7 @@ use crate::game::GameFlags;
 use crate::helpers::{AllowInject, TigerHashMap, dup_assign_error};
 use crate::item::{Item, ItemLoader};
 use crate::modif::validate_modifs;
+use crate::report::{ErrorKey, tips};
 use crate::scopes::Scopes;
 use crate::token::Token;
 use crate::tooltipped::Tooltipped;
@@ -191,6 +192,15 @@ impl DbKind for CountryFormation {
         vd.field_integer("max_num_formation_candidates");
         vd.field_trigger_rooted("can_be_formation_candidate", Tooltipped::No, Scopes::Country);
         vd.field_trigger_rooted("can_be_unification_target", Tooltipped::Yes, Scopes::Country);
+        vd.field_validated_key_block("should_target_state_in_unification_play", |key, block, _| {
+            if block.num_items() != 0 {
+                tips(ErrorKey::Scopes)
+                    .weak()
+                    .msg("non-empty should_target_state_in_unification_play needs scope review")
+                    .loc(key)
+                    .push();
+            }
+        });
         vd.field_trigger_rooted("potential", Tooltipped::No, Scopes::Country);
     }
 }
