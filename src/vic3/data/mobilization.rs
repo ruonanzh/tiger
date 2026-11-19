@@ -100,6 +100,7 @@ impl DbKind for MobilizationOptionGroup {
         data.verify_exists_implied(Item::Localization, &loca, key);
 
         vd.field_item("icon", Item::File);
+        vd.field_item("background", Item::File);
         vd.field_numeric("weight");
     }
 }

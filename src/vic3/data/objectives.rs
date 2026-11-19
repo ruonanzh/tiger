@@ -38,6 +38,7 @@ impl DbKind for Objective {
         vd.field_list_items("recommended_tags", Item::Country);
         vd.field_bool("available_for_all_countries");
         vd.field_list_items("recommended_game_rules", Item::GameRuleSetting); // undocumented
+        vd.field_list_items("associated_journal_entries", Item::JournalEntry);
         vd.field_list_items("objective_subgoals", Item::ObjectiveSubgoal);
         // TODO: check if it's in the list above?
         vd.field_item("final_subgoal", Item::ObjectiveSubgoal); // undocumented

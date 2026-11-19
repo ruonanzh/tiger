@@ -32,6 +32,7 @@ impl DbKind for NavalMissionType {
         data.verify_exists_implied(Item::Localization, &loca, key);
 
         vd.field_item("icon", Item::File);
+        vd.field_item("map_texture", Item::File);
         vd.field_bool("intercept");
         vd.field_bool("project_power");
         vd.field_bool("blockade");

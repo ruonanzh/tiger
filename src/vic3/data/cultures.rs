@@ -60,6 +60,10 @@ impl DbKind for Culture {
         vd.multi_field_list_items("noble_last_names", Item::Localization);
         vd.multi_field_list_items("regal_last_names", Item::Localization);
 
+        vd.multi_field_list_items("female_common_last_names", Item::Localization);
+        vd.multi_field_list_items("female_noble_last_names", Item::Localization);
+        vd.multi_field_list_items("female_regal_last_names", Item::Localization);
+
         vd.multi_field_list_items("obsessions", Item::Goods);
         vd.multi_field_list_items("taboos", Item::Goods);
 

@@ -166,6 +166,7 @@ pub const TERRAIN_KEYS: &[&str] = &[
 pub const COMMON_DIRS: &[&str] = &[
     "common/acceptance_statuses",
     "common/achievements",
+    "common/ai_regional_objectives",
     "common/ai_strategic_region_stance_types",
     "common/ai_strategies",
     "common/alert_groups",

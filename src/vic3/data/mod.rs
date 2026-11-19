@@ -1,4 +1,5 @@
 pub mod acceptance;
+mod ai_regional_objectives;
 pub mod ai_stances;
 pub mod ai_strategies;
 pub mod air_graphics;

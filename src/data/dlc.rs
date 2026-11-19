@@ -79,6 +79,7 @@ impl DbKind for Dlc {
         vd.field_value("msgr_id");
 
         if Game::is_vic3() {
+            vd.field_integer("release_order");
             vd.field_bool("theme_provider");
         } else if Game::is_ck3() {
             // Documented but not used

@@ -35,6 +35,8 @@ impl DbKind for AcceptanceStatus {
 
         vd.field_numeric("threshold");
         vd.field_numeric("base_migration_desire");
+        vd.field_numeric("war_support_impact_own_side");
+        vd.field_numeric("war_support_impact_other_side");
         vd.field_numeric("war_exhaustion_impact_own_side");
         vd.field_numeric("war_exhaustion_impact_other_side");
 

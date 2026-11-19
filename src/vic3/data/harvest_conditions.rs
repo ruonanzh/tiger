@@ -81,6 +81,7 @@ impl DbKind for HarvestConditionType {
         );
 
         vd.field_list_items("incompatible_terrain", Item::Terrain);
+        vd.field_item("naval_battle_condition", Item::NavalBattleCondition);
         vd.field_item("map_texture", Item::File);
     }
 }

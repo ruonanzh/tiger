@@ -34,6 +34,7 @@ impl DbKind for GovernmentType {
         data.verify_exists_implied(Item::Localization, &loca, key);
 
         vd.field_item("transfer_of_power", Item::TransferOfPower);
+        vd.field_bool("uses_regnal_numbers");
         vd.field_bool("new_leader_on_reform_government");
 
         vd.field_item("male_ruler", Item::Localization);

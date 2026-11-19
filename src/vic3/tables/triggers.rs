@@ -1060,6 +1060,22 @@ const TRIGGER: &[(Scopes, &str, Trigger)] = &[
     (Scopes::JournalEntry, "is_progressing", Boolean),
     (Scopes::Province, "is_province_land", Boolean),
     (Scopes::Law, "is_reasonable_law_for_petition", Boolean),
+    (
+        Scopes::Country,
+        "is_regional_objective_target_country",
+        Block(&[
+            ("type", Scope(Scopes::AiRegionalObjectiveType)),
+            ("target", Scope(Scopes::Country)),
+        ]),
+    ),
+    (
+        Scopes::Country,
+        "is_regional_objective_target_state",
+        Block(&[
+            ("type", Scope(Scopes::AiRegionalObjectiveType)),
+            ("target", Scope(Scopes::State)),
+        ]),
+    ),
     (Scopes::Treaty.union(Scopes::TreatyOptions), "is_renegotiation", Boolean),
     (Scopes::Character, "is_repairing", Removed("1.6", "")),
     (Scopes::Country, "is_researching_technology", Special), // also accepts "any"

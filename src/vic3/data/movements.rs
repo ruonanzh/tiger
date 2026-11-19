@@ -101,6 +101,9 @@ impl DbKind for PoliticalMovement {
         for field in &["revolution", "secession"] {
             vd.field_validated_block(field, |block, data| {
                 let mut vd = Validator::new(block, data);
+                if *field == "secession" {
+                    vd.field_bool("can_secede_during_revolution");
+                }
                 vd.field_trigger_builder("possible", Tooltipped::No, |key| {
                     let mut sc = ScopeContext::new(Scopes::PoliticalMovement, key);
                     sc.define_name("clout", Scopes::Value, key);

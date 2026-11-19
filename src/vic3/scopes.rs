@@ -3,6 +3,11 @@ use crate::scopes::Scopes;
 
 pub fn needs_prefix(arg: &str, data: &Everything, scopes: Scopes) -> Option<&'static str> {
     use crate::item::Item;
+    if scopes == Scopes::AiRegionalObjectiveType
+        && data.item_exists(Item::AiRegionalObjectiveType, arg)
+    {
+        return Some("aro");
+    }
     if scopes == Scopes::Building && data.item_exists(Item::BuildingType, arg) {
         return Some("b");
     }

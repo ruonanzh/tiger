@@ -41,6 +41,7 @@ impl DbKind for Country {
         vd.field_item("social_hierarchy", Item::SocialHierarchy);
         vd.field_list_items("cultures", Item::Culture);
         vd.field_item("religion", Item::Religion);
+        vd.field_item("seal_and_signature_texture", Item::File);
         vd.field_item("capital", Item::StateRegion);
         vd.field_bool("is_named_from_capital");
         vd.field_bool("dynamic_country_definition");

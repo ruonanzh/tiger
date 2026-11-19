@@ -69,6 +69,12 @@ impl DbKind for CharacterRole {
             validate_modifs(block, data, ModifKinds::Character, vd);
         });
 
+        vd.multi_field_validated_block("character_background", |block, data| {
+            let mut vd = Validator::new(block, data);
+            vd.field_trigger_rooted("trigger", Tooltipped::No, Scopes::Character);
+            vd.field_item("texture", Item::File);
+        });
+
         // undocumented
         vd.field_validated_block("holding_scores", |block, data| {
             let mut vd = Validator::new(block, data);
