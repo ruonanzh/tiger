@@ -7,7 +7,7 @@ use thiserror::Error;
 
 #[cfg(doc)]
 use crate::datatype::Datatype;
-use crate::game::GameFlags;
+use crate::game::{Game, GameFlags};
 use crate::gui::BuiltinWidget;
 #[cfg(doc)]
 use crate::gui::GuiBlock;
@@ -109,6 +109,7 @@ pub enum GuiValidation {
 #[allow(non_camel_case_types)]
 #[strum(serialize_all = "lowercase")] // for "loop"
 pub enum WidgetProperty {
+    accept_draggable_id,
     accept_tabs,
     acceptance,
     action_tooltip,
@@ -198,10 +199,12 @@ pub enum WidgetProperty {
     drag_drop_base_type,
     drag_drop_data,
     drag_drop_id,
+    drag_widget,
     dragdropargs,
     dragdropid,
     draggable_behavior,
     draggable_by,
+    draggable_id,
     drop_target,
     droptarget,
     duration,
@@ -329,6 +332,7 @@ pub enum WidgetProperty {
     on_finish,
     on_input_action_shortcut,
     on_keyframe_move,
+    on_receive_drop,
     on_start,
     onalt,
     onchangefinish,
@@ -556,6 +560,7 @@ impl GuiValidation {
     pub fn from_property(property: WidgetProperty) -> Self {
         #[allow(clippy::match_same_arms)] // keep it alphabetic
         match property {
+            accept_draggable_id => UncheckedValue,
             accept_tabs => Boolean,
             acceptance => DatatypeExpr,
             action_tooltip => ActionTooltip,
@@ -647,9 +652,13 @@ impl GuiValidation {
             drag_drop_id => UncheckedValue, // TODO what are the options?
             dragdropargs => RawText,
             dragdropid => RawText,
-            draggable_behavior => UncheckedValue, // TODO
+            drag_widget => Widget,
+            draggable_behavior if Game::is_vic3() => ComplexProperty,
+            draggable_behavior => UncheckedValue,
+            draggable_id => UncheckedValue,
             draggable_by => MouseButtonSet(&["left", "right", "middle"]),
-            drop_target => UncheckedValue, // TODO
+            drop_target if Game::is_vic3() => ComplexProperty,
+            drop_target => UncheckedValue,
             droptarget => Boolean,
             duration => Number,
             effect => DatatypeExpr,
@@ -776,6 +785,7 @@ impl GuiValidation {
             on_finish => DatatypeExpr,
             on_input_action_shortcut => UncheckedValue, // TODO
             on_keyframe_move => DatatypeExpr,
+            on_receive_drop => DatatypeExpr,
             on_start => DatatypeExpr,
             onalt => DatatypeExpr,
             onchangefinish => DatatypeExpr,
@@ -1085,6 +1095,7 @@ impl WidgetProperty {
             }
 
             draggable_behavior | drop_target | onctrl => GameFlags::Vic3 | GameFlags::Eu5,
+            accept_draggable_id | drag_widget | draggable_id | on_receive_drop => GameFlags::Vic3,
 
             frame_tier | ondatacontextchanged | dragdropid | dragdropargs | forcedown | url
             | onleave_signal | onenter_signal => GameFlags::Imperator,

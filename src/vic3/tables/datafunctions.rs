@@ -46,6 +46,11 @@ pub static GLOBAL_PROMOTES_MAP: LazyLock<TigerHashMap<&'static str, (Args, Datat
         for (name, args, datatype) in GLOBAL_PROMOTES_VIC3.iter().copied() {
             map.insert(name, (args, datatype));
         }
+        // Used by the drop handlers in construction_panel.gui and construction_queue.gui.
+        map.insert(
+            "GetDraggedDatacontext",
+            (Args::Args(&[Arg::DType(Datatype::CString)]), Datatype::Unknown),
+        );
         map
     });
 

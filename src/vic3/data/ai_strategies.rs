@@ -365,10 +365,15 @@ fn validate_strait_scores(_key: &Token, block: &Block, data: &Everything) {
     });
     vd.field_validated_block("toll_rate_scores", |block, data| {
         let mut vd = Validator::new(block, data);
-        vd.field_script_value_no_breakdown_builder("no_tolls", sc_builder);
-        vd.field_script_value_no_breakdown_builder("low_tolls", sc_builder);
-        vd.field_script_value_no_breakdown_builder("medium_tolls", sc_builder);
-        vd.field_script_value_no_breakdown_builder("high_tolls", sc_builder);
+        let toll_sc_builder = |key: &Token| {
+            let mut sc = sc_builder(key);
+            sc.define_name("toll_income_per_percent", Scopes::Value, key);
+            sc
+        };
+        vd.field_script_value_no_breakdown_builder("no_tolls", toll_sc_builder);
+        vd.field_script_value_no_breakdown_builder("low_tolls", toll_sc_builder);
+        vd.field_script_value_no_breakdown_builder("medium_tolls", toll_sc_builder);
+        vd.field_script_value_no_breakdown_builder("high_tolls", toll_sc_builder);
     });
 }
 

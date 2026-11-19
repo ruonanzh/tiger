@@ -63,11 +63,30 @@ impl DbKind for DiplomaticCatalyst {
 
         vd.req_field("category");
         vd.field_item("category", Item::DiplomaticCatalystCategory);
+        // These engine-created catalysts supply the grievance before and after the change.
+        let has_strait_grievance = [
+            "NDiplomacy|DIPLOMATIC_CATALYST_TYPE_STRAIT_TOLL_HIGH",
+            "NDiplomacy|DIPLOMATIC_CATALYST_TYPE_STRAIT_TOLL_REDUCED",
+            "NDiplomacy|DIPLOMATIC_CATALYST_TYPE_STRAIT_NO_MILITARY",
+            "NDiplomacy|DIPLOMATIC_CATALYST_TYPE_STRAIT_CLOSED",
+            "NDiplomacy|DIPLOMATIC_CATALYST_TYPE_STRAIT_OPENED",
+            "NDiplomacy|DIPLOMATIC_CATALYST_TYPE_STRAIT_PARTIALLY_OPENED",
+        ]
+        .iter()
+        .any(|define| data.get_defined_string(define).is_some_and(|catalyst| catalyst == key));
+        let catalyst_context = || {
+            let mut sc = ScopeContext::new(Scopes::Country, key);
+            sc.define_name("target_country", Scopes::Country, key);
+            if has_strait_grievance {
+                sc.define_name("value_before", Scopes::Value, key);
+                sc.define_name("value_after", Scopes::Value, key);
+            }
+            sc
+        };
 
         vd.field_validated_block("political_lobby_creation", |block, data| {
             let mut vd = Validator::new(block, data);
-            let mut sc = ScopeContext::new(Scopes::Country, key);
-            sc.define_name("target_country", Scopes::Country, key);
+            let mut sc = catalyst_context();
             sc.define_name("new_diplomatic_relation", Scopes::Bool, key);
 
             vd.field_trigger("trigger", Tooltipped::No, &mut sc);
@@ -79,8 +98,7 @@ impl DbKind for DiplomaticCatalyst {
 
         vd.field_validated_block("ai_country_goal_recalculation", |block, data| {
             let mut vd = Validator::new(block, data);
-            let mut sc = ScopeContext::new(Scopes::Country, key);
-            sc.define_name("target_country", Scopes::Country, key);
+            let mut sc = catalyst_context();
             sc.define_name("new_diplomatic_relation", Scopes::Bool, key);
             vd.field_choice(
                 "type",
@@ -98,10 +116,6 @@ impl DbKind for DiplomaticCatalyst {
             vd.field_script_value_no_breakdown("chance", &mut sc);
         });
 
-        vd.field_effect_builder("effect", Tooltipped::No, |key| {
-            let mut sc = ScopeContext::new(Scopes::Country, key);
-            sc.define_name("target_country", Scopes::Country, key);
-            sc
-        });
+        vd.field_effect_builder("effect", Tooltipped::No, |_| catalyst_context());
     }
 }

@@ -94,7 +94,7 @@ use crate::variables::Variables;
 #[cfg(feature = "vic3")]
 use crate::vic3::data::{
     buy_packages::BuyPackage, history::History, provinces::Vic3Provinces,
-    strategic_regions::StrategicRegion, terrain::TerrainMask,
+    strategic_regions::StrategicRegion, terrain::TerrainMask, themes::OptionalThemeAssets,
 };
 #[cfg(feature = "vic3")]
 use crate::vic3::tables::misc::*;
@@ -143,6 +143,9 @@ pub struct Everything {
     /// A general database of item types. Most items go here. The ones that need special handling
     /// go in the separate databases listed below.
     pub(crate) database: Db,
+
+    #[cfg(feature = "vic3")]
+    pub(crate) optional_theme_assets: OptionalThemeAssets,
 
     pub(crate) localization: Localization,
 
@@ -523,6 +526,8 @@ impl Everything {
             #[cfg(any(feature = "ck3", feature = "vic3"))]
             warned_defines: RwLock::new(TigerHashSet::default()),
             database: Db::default(),
+            #[cfg(feature = "vic3")]
+            optional_theme_assets: OptionalThemeAssets::default(),
             localization: Localization::default(),
             #[cfg(feature = "jomini")]
             scripted_lists: ScriptedLists::default(),
@@ -882,6 +887,8 @@ impl Everything {
             }
             s.spawn(|_| self.database.validate(self));
         });
+        #[cfg(feature = "vic3")]
+        self.optional_theme_assets.report();
         self.localization.validate_pass2(self);
     }
 
@@ -1354,7 +1361,7 @@ impl Everything {
         self.effects.get(key.as_str())
     }
 
-    #[cfg(feature = "ck3")]
+    #[cfg(any(feature = "ck3", feature = "vic3"))]
     pub(crate) fn get_defined_string(&self, key: &str) -> Option<&Token> {
         self.defines.get_bv(key).and_then(BV::get_value)
     }

@@ -117,6 +117,7 @@ impl DbKind for TreatyArticle {
             "law_type",
             "country",
             "ship",
+            "text",
         ];
         vd.field_list_choice("required_inputs", required_inputs);
 
@@ -136,7 +137,7 @@ impl DbKind for TreatyArticle {
                 vd.field_script_value_builder("quantity_max_value", |key| {
                     build_quantity_sc(key, is_directed)
                 });
-            } else {
+            } else if !input.is("text") {
                 let valid_trigger = format!("{input}_valid_trigger");
                 vd.field_trigger_builder(&valid_trigger, Tooltipped::No, |key| {
                     build_input_sc(key, input)

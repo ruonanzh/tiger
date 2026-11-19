@@ -143,8 +143,27 @@ impl Events {
             item.validate(data);
         }
 
+        #[cfg(feature = "vic3")]
+        let journal_entry_callers = data
+            .database
+            .iter_key_block(Item::JournalEntry)
+            .filter_map(|(key, block)| Some((key, block.get_field_block("immediate")?)))
+            .flat_map(|(key, immediate)| {
+                immediate.iter_fields().filter_map(move |field| {
+                    if !field.is_eq() || !field.key().lowercase_is("trigger_event") {
+                        return None;
+                    }
+                    let event = field.bv().get_value()?;
+                    Some((event.as_str(), key))
+                })
+            })
+            .collect::<TigerHashMap<_, _>>();
         self.events.par_iter().for_each(|(_, item)| {
-            item.validate(data);
+            item.validate(
+                data,
+                #[cfg(feature = "vic3")]
+                journal_entry_callers.get(item.key.as_str()).copied(),
+            );
         });
     }
 
@@ -257,7 +276,11 @@ impl Event {
         Self { key, block, expects_scope, expects_from_token, visited }
     }
 
-    pub fn validate(&self, data: &Everything) {
+    pub fn validate(
+        &self,
+        data: &Everything,
+        #[cfg(feature = "vic3")] journal_entry_caller: Option<&Token>,
+    ) {
         if let Some((namespace, _)) = self.key.as_str().split_once('.')
             && !data.item_exists(Item::EventNamespace, namespace)
         {
@@ -269,6 +292,12 @@ impl Event {
         let mut sc = ScopeContext::new(self.expects_scope, &self.expects_from_token);
         sc.set_strict_scopes(false);
         sc.set_source(&self.key);
+        // The standalone pass has no caller. Use the documented input from a directly observed
+        // JE activation; each explicit call still validates with its own supplied scopes.
+        #[cfg(feature = "vic3")]
+        if let Some(caller) = journal_entry_caller {
+            sc.define_name("journal_entry", Scopes::JournalEntry, caller);
+        }
 
         match Game::game() {
             #[cfg(feature = "ck3")]

@@ -48,6 +48,9 @@ pub struct Validator<'a> {
     known_fields: Vec<&'a str>,
     /// Whether loose tokens are expected
     accepted_tokens: bool,
+    /// Loose values consumed by a field that takes a value followed by a second token.
+    #[cfg(feature = "vic3")]
+    field_suffixes: Vec<&'a Token>,
     /// Whether subblocks are expected
     accepted_blocks: bool,
     /// Whether unknown block fields are expected
@@ -91,6 +94,8 @@ impl<'a> Validator<'a> {
             data,
             known_fields: Vec::new(),
             accepted_tokens: false,
+            #[cfg(feature = "vic3")]
+            field_suffixes: Vec::new(),
             accepted_blocks: false,
             accepted_block_fields: false,
             accepted_value_fields: false,
@@ -1339,6 +1344,49 @@ impl<'a> Validator<'a> {
         self.field_check(name, AllowInject::No, |_, bv| f(bv, data))
     }
 
+    /// Check a field whose value may be a keyword followed by a loose value.
+    /// Only the immediately following item can supply that value.
+    #[cfg(feature = "vic3")]
+    pub fn field_with_item_suffix<F>(
+        &mut self,
+        name: &str,
+        keyword: &str,
+        item_type: Item,
+        mut validate_other: F,
+    ) where
+        F: FnMut(&BV, &Everything),
+    {
+        let items = self.block.iter_items().as_slice();
+        let mut found = None;
+        for (index, item) in items.iter().enumerate() {
+            let BlockItem::Field(Field(key, cmp, bv)) = item else { continue };
+            if !key.is(name) {
+                continue;
+            }
+            self.known_fields.push(key.as_str());
+            self.expect_eq_qeq(key, *cmp);
+            if let Some(other) = found {
+                dup_assign_error(key, other, AllowInject::No);
+            }
+            found = Some(key);
+
+            if let BV::Value(value) = bv
+                && value.is(keyword)
+            {
+                if let Some(BlockItem::Value(suffix)) = items.get(index + 1) {
+                    self.field_suffixes.push(suffix);
+                    self.data.verify_exists(item_type, suffix);
+                } else {
+                    let msg = format!("`{keyword}` requires a following {item_type}");
+                    let sev = Severity::Error.at_most(self.max_severity);
+                    report(ErrorKey::Structure, sev).msg(msg).loc(value).push();
+                }
+            } else {
+                validate_other(bv, self.data);
+            }
+        }
+    }
+
     /// Just like [`Validator::field_validated`], but the closure is `f(key, bv, data)`.
     pub fn field_validated_key<F>(&mut self, name: &str, mut f: F) -> bool
     where
@@ -2061,6 +2109,10 @@ impl<'a> Validator<'a> {
                     }
                 },
                 BlockItem::Value(t) => {
+                    #[cfg(feature = "vic3")]
+                    if self.field_suffixes.iter().any(|suffix| std::ptr::eq(*suffix, t)) {
+                        continue;
+                    }
                     if !self.accepted_tokens {
                         let msg = format!("found loose value {t}, expected only `key =`");
                         let sev = Severity::Error.at_most(self.max_severity);

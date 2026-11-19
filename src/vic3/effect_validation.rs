@@ -520,7 +520,11 @@ pub fn validate_create_dynamic_country(
     vd.field_target("capital", sc, Scopes::State);
     vd.field_item("social_hierarchy", Item::SocialHierarchy);
     vd.field_trigger_rooted("cede_state_trigger", Tooltipped::No, Scopes::State);
-    vd.field_validated("color", validate_possibly_named_color);
+    vd.field_with_item_suffix("color", "list", Item::CoaColorList, |bv, data| {
+        if !matches!(bv, BV::Value(value) if value.is("random")) {
+            validate_possibly_named_color(bv, data);
+        }
+    });
     vd.field_validated("primary_unit_color", validate_possibly_named_color);
     vd.field_validated("secondary_unit_color", validate_possibly_named_color);
     vd.field_validated("tertiary_unit_color", validate_possibly_named_color);

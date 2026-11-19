@@ -41,6 +41,7 @@ impl DbKind for Party {
         );
 
         ig_sc.define_name("number", Scopes::Value, key);
+        ig_sc.define_name("founding_party", Scopes::Bool, key);
         vd.field_script_value("join_weight", &mut ig_sc);
 
         // TODO: what else is allowed here?

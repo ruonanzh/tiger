@@ -317,6 +317,22 @@ pub fn validate_datatypes(
             }
         }
 
+        // The argument names the type of the datacontext carried by the dragged widget.
+        #[cfg(feature = "vic3")]
+        if Game::is_vic3()
+            && found
+            && code.name.is("GetDraggedDatacontext")
+            && let [CodeArg::Literal(name)] = code.arguments.as_slice()
+        {
+            match Datatype::from_str(name.as_str()) {
+                Ok(dtype @ Datatype::Vic3(_)) => rtype = dtype,
+                _ => {
+                    let msg = format!("unrecognized dragged datacontext {}", name);
+                    warn(ErrorKey::Datafunctions).msg(msg).loc(name).push();
+                }
+            }
+        }
+
         if Game::is_hoi4() && !found && !is_first && code.name.is("FROM") {
             // FROM can be chained, regardless of datatype
             found = true;

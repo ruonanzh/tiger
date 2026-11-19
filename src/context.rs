@@ -1092,14 +1092,23 @@ impl ScopeContext {
     #[cfg(feature = "vic3")]
     pub fn get_multiplier_context(&self, key: &Token) -> Self {
         let scopes = self.resolve_root().0;
-        let mut sc = ScopeContext::new(scopes, key);
+        // The multiplier starts at root but still sees the calling effect's saved scopes.
+        // Validate on a copy so references made inside the value do not change the caller.
+        let mut sc = self.clone();
         sc.root = ScopeEntry::Scope(scopes, Reason::MultiplierBug(key.clone()));
+        sc.scope_stack = vec![ScopeEntry::Rootref];
+        sc.prev_levels = 0;
+        sc.is_builder = false;
+        sc.is_unrooted = false;
+        sc.set_source(key);
         sc
     }
 
     #[cfg(feature = "vic3")]
     pub fn get_add_modifier_multiplier_context(&self, key: &Token) -> Self {
-        let mut sc = self.get_multiplier_context(key);
+        let scopes = self.resolve_root().0;
+        let mut sc = ScopeContext::new(scopes, key);
+        sc.root = ScopeEntry::Scope(scopes, Reason::MultiplierBug(key.clone()));
         sc.review_missing_scopes = self.review_missing_scopes;
         // The engine preserves the journal entry supplied to a JE when evaluating its modifier.
         if let Some(&(idx, Temporary::No)) = self.scope_names.get("journal_entry")

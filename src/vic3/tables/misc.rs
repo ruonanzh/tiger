@@ -315,6 +315,7 @@ pub const COMMON_DIRS: &[&str] = &[
     "common/terrain_manipulators",
     "common/terrain_manipulators/provinces",
     "common/themes",
+    "common/travel_network",
     "common/treaty_articles",
     "common/trigger_localization",
     "common/tutorial_lesson_chains",

@@ -211,6 +211,7 @@ pub const ON_ACTION_SCOPES: &str = "
 
 	on_wargoal_enforced = {
                 root = country
+                actor = country
                 target = country
                 diplomatic_play = diplomatic_play
                 wargoal_impact = value

@@ -267,6 +267,10 @@ pub struct Fileset {
     /// DLC directories to be loaded after vanilla, in order.
     loaded_dlcs: Vec<LoadedMod>,
 
+    /// Whether the installed DLC roots could be enumerated.
+    #[cfg(feature = "vic3")]
+    dlc_scan_complete: bool,
+
     /// The ck3-tiger config.
     config: Option<Block>,
 
@@ -311,6 +315,8 @@ impl Fileset {
             the_mod: LoadedMod::new_main_mod(mod_root, replace_paths),
             loaded_mods: Vec::new(),
             loaded_dlcs: Vec::new(),
+            #[cfg(feature = "vic3")]
+            dlc_scan_complete: false,
             config: None,
             files: Vec::new(),
             ordered_files: Vec::new(),
@@ -515,7 +521,29 @@ impl Fileset {
     }
 
     pub fn load_dlcs(&mut self, dlc_root: &Path) -> Result<(), FilesError> {
-        for entry in WalkDir::new(dlc_root).max_depth(1).sort_by_file_name().into_iter().flatten() {
+        #[cfg(feature = "vic3")]
+        let mut scan_complete = true;
+        for entry in WalkDir::new(dlc_root).max_depth(1).sort_by_file_name() {
+            let entry = match entry {
+                Ok(entry) => entry,
+                Err(error) => {
+                    #[cfg(not(feature = "vic3"))]
+                    let _ = error;
+                    #[cfg(feature = "vic3")]
+                    {
+                        let missing_root = error.depth() == 0
+                            && error
+                                .io_error()
+                                .is_some_and(|e| e.kind() == std::io::ErrorKind::NotFound);
+                        scan_complete &= missing_root;
+                    }
+                    continue;
+                }
+            };
+            #[cfg(feature = "vic3")]
+            if entry.file_type().is_symlink() {
+                scan_complete = false;
+            }
             if entry.depth() == 1 && entry.file_type().is_dir() {
                 let label = entry.file_name().to_string_lossy().to_string();
                 let idx =
@@ -534,7 +562,34 @@ impl Fileset {
                 add_loaded_dlc_root(label);
             }
         }
+        #[cfg(feature = "vic3")]
+        {
+            self.dlc_scan_complete = scan_complete;
+        }
         Ok(())
+    }
+
+    #[cfg(feature = "vic3")]
+    pub(crate) fn vic3_dlc_payload_absent(&self, key: &str) -> bool {
+        let Some(vanilla_root) = &self.vanilla_root else {
+            return false;
+        };
+        if !self.dlc_scan_complete
+            || key.is_empty()
+            || !key.bytes().all(|ch| ch.is_ascii_alphanumeric() || ch == b'_')
+        {
+            return false;
+        }
+        // DLC metadata documents the database key as the descriptor filename. A matching
+        // directory also prevents treating an incomplete or alternate layout as absent.
+        let descriptor = format!("{key}.dlc");
+        let directory_prefix = format!("{}_", key.to_ascii_lowercase());
+        matches!(vanilla_root.join("dlc").join(&descriptor).try_exists(), Ok(false))
+            && self.loaded_dlcs.iter().all(|dlc| {
+                !dlc.label.eq_ignore_ascii_case(key)
+                    && !dlc.label.to_ascii_lowercase().starts_with(&directory_prefix)
+                    && matches!(dlc.root().join(&descriptor).try_exists(), Ok(false))
+            })
     }
 
     pub fn finalize(&mut self) {

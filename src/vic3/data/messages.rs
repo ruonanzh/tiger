@@ -32,7 +32,10 @@ impl DbKind for Message {
         let loca = format!("notification_{key}_desc");
         data.verify_exists_implied(Item::Localization, &loca, key);
 
-        vd.req_field("type");
+        // Default styling for send_interface_message.
+        if !key.is("interface_message") {
+            vd.req_field("type");
+        }
         vd.req_field("texture");
         vd.req_field("notification_type");
 

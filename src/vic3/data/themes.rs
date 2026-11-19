@@ -1,17 +1,49 @@
+use std::collections::BTreeMap;
+use std::mem::take;
 use std::path::PathBuf;
+use std::sync::Mutex;
 
 use crate::block::Block;
 use crate::context::ScopeContext;
 use crate::db::{Db, DbKind};
 use crate::everything::Everything;
+use crate::fileset::FileKind;
 use crate::game::GameFlags;
 use crate::item::{Item, ItemLoader, LoadAsFile, Recursive};
 use crate::pdxfile::PdxEncoding;
-use crate::report::{ErrorKey, warn};
+use crate::report::{ErrorKey, ErrorLoc, LogReportPointers, PointedMessage, tips, warn};
 use crate::scopes::Scopes;
 use crate::token::Token;
 use crate::tooltipped::Tooltipped;
-use crate::validator::Validator;
+use crate::validator::{Validator, ValueValidator};
+
+#[derive(Debug, Default)]
+pub(crate) struct OptionalThemeAssets(Mutex<BTreeMap<(String, FileKind), LogReportPointers>>);
+
+impl OptionalThemeAssets {
+    fn record(&self, dlc: &Token, kind: Item, value: &Token) {
+        let location = PointedMessage {
+            loc: value.loc,
+            length: value.loc_length(),
+            msg: Some(format!("{kind} {value}")),
+        };
+        self.0.lock().unwrap().entry((dlc.to_string(), value.loc.kind)).or_default().push(location);
+    }
+
+    pub(crate) fn report(&self) {
+        for ((dlc, _), mut locations) in take(&mut *self.0.lock().unwrap()) {
+            locations.sort_by_key(|pointer| {
+                (pointer.loc.fullpath(), pointer.loc.line, pointer.loc.column)
+            });
+            tips(ErrorKey::OptionalDlc)
+                .msg(format!(
+                    "Theme assets could not be checked because DLC {dlc} is not installed"
+                ))
+                .pointers(locations)
+                .push();
+        }
+    }
+}
 
 #[derive(Clone, Debug)]
 pub struct Theme {}
@@ -23,6 +55,35 @@ inventory::submit! {
 impl Theme {
     pub fn add(db: &mut Db, key: Token, block: Block) {
         db.add(Item::Theme, key, block, Box::new(Self {}));
+    }
+
+    fn absent_dlc<'a>(block: &'a Block, data: &Everything) -> Option<&'a Token> {
+        let mut fields = block.iter_fields().filter(|field| field.key().is("dlc"));
+        let field = fields.next()?;
+        if !field.is_eq() || fields.next().is_some() {
+            return None;
+        }
+        let dlc = field.bv().get_value()?;
+        let (key, metadata) = data.database.get_key_block(Item::Dlc, dlc.as_str())?;
+        (key.loc.kind == FileKind::Vanilla
+            && metadata.get_field_bool("theme_provider") == Some(true)
+            && data.fileset.vic3_dlc_payload_absent(dlc.as_str()))
+        .then_some(dlc)
+    }
+
+    fn check_asset(mut value: ValueValidator, kind: Item, absent_dlc: Option<&Token>) {
+        let token = value.value();
+        if let Some(dlc) = absent_dlc
+            && !token.as_str().is_empty()
+            && !token.as_str().contains(['.', ':', '/', '\\'])
+            && !token.as_str().chars().any(char::is_whitespace)
+            && !value.data().item_exists(kind, token.as_str())
+        {
+            value.data().optional_theme_assets.record(dlc, kind, token);
+            value.accept();
+        } else {
+            value.item(kind);
+        }
     }
 }
 
@@ -54,18 +115,26 @@ impl DbKind for Theme {
 
         vd.field_trigger_rooted("selectable", Tooltipped::No, Scopes::None);
 
+        let absent_dlc = Self::absent_dlc(block, data);
         vd.advice_field("skin", "docs say skin, but it's ui_skin");
-        vd.field_validated_value("ui_skin", |_, mut vd| {
-            vd.maybe_is("default");
-            vd.item(Item::Skin);
+        vd.field_validated_value("ui_skin", |_, mut value| {
+            if value.value().is("default") {
+                value.accept();
+            } else {
+                Self::check_asset(value, Item::Skin, absent_dlc);
+            }
         });
 
         vd.advice_field("theme_object", "docs say theme_object, but it's map_object");
         vd.multi_field_validated_block("map_object", |block, data| {
             let mut vd = Validator::new(block, data);
             vd.req_field_one_of(&["pdxmesh", "entity"]);
-            vd.field_item("pdxmesh", Item::Pdxmesh);
-            vd.field_item("entity", Item::Entity);
+            vd.field_validated_value("pdxmesh", |_, value| {
+                Self::check_asset(value, Item::Pdxmesh, absent_dlc);
+            });
+            vd.field_validated_value("entity", |_, value| {
+                Self::check_asset(value, Item::Entity, absent_dlc);
+            });
             vd.req_field("locator");
             vd.field_value("locator"); // TODO
         });

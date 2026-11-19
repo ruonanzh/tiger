@@ -2061,6 +2061,24 @@ const TRIGGER_COMPLEX: &[(Scopes, &str, ArgumentValue, Scopes)] = {
     use ArgumentValue::*;
     const TREATY: Scopes = Scopes::Treaty.union(Scopes::TreatyOptions);
     &[
+        (
+            Scopes::Country,
+            "additional_war_support_change",
+            Scope(Scopes::DiplomaticPlay),
+            Scopes::Value,
+        ),
+        (Scopes::War, "blockaded_gdp_share", Scope(Scopes::Country), Scopes::Value),
+        (Scopes::War, "enemy_pressure", Scope(Scopes::Country), Scopes::Value),
+        (Scopes::War, "gdp_change_since_war_start", Scope(Scopes::Country), Scopes::Value),
+        (Scopes::Country, "gdp_owned_by", Scope(Scopes::Country), Scopes::Value),
+        (Scopes::War, "land_lost_since_war_start", Scope(Scopes::Country), Scopes::Value),
+        (
+            Scopes::Building,
+            "num_building_assets_of_group",
+            Item(Item::BuildingGroup),
+            Scopes::Value,
+        ),
+        (Scopes::War, "war_support_from_acceptance_of_dead", Scope(Scopes::Country), Scopes::Value),
         (TREATY, "ai_ship_purchase_rejected_share", Scope(Scopes::Ship), Scopes::Value),
         (TREATY, "ai_ship_purchase_value_multiplier", Scope(Scopes::Ship), Scopes::Value),
         (TREATY, "ai_ship_sale_remaining_share", Scope(Scopes::Ship), Scopes::Value),

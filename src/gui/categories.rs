@@ -18,6 +18,8 @@ bitflags! {
     pub struct GuiCategories: u8 {
         // Properties that are accepted in all widget types
         const Widget = 0x01;
+        const Vic3Draggable = 0x02;
+        const Vic3DropTarget = 0x04;
 
         const Unknown = 0xff;
     }
@@ -28,6 +30,10 @@ impl GuiCategories {
         #[allow(clippy::match_same_arms)] // keep them alphabetic
         match prop {
             // These are the ComplexProperty properties
+            WidgetProperty::draggable_behavior => {
+                GuiCategories::Widget | GuiCategories::Vic3Draggable
+            }
+            WidgetProperty::drop_target => GuiCategories::Widget | GuiCategories::Vic3DropTarget,
             WidgetProperty::animation => GuiCategories::Unknown,
             WidgetProperty::attachto => GuiCategories::Unknown,
             WidgetProperty::click_modifiers => GuiCategories::Unknown,
@@ -46,6 +52,7 @@ impl GuiCategories {
     pub fn property_in_container(prop: WidgetProperty) -> Self {
         #[allow(clippy::match_same_arms)] // keep them alphabetic
         match prop {
+            WidgetProperty::accept_draggable_id => GuiCategories::Vic3DropTarget,
             WidgetProperty::accept_tabs => GuiCategories::Unknown,
             WidgetProperty::acceptance => GuiCategories::Unknown,
             WidgetProperty::action_tooltip => GuiCategories::Unknown,
@@ -137,7 +144,9 @@ impl GuiCategories {
             WidgetProperty::drag_drop_id => GuiCategories::Unknown,
             WidgetProperty::dragdropargs => GuiCategories::Unknown,
             WidgetProperty::dragdropid => GuiCategories::Unknown,
+            WidgetProperty::drag_widget => GuiCategories::Vic3Draggable,
             WidgetProperty::draggable_behavior => GuiCategories::Unknown,
+            WidgetProperty::draggable_id => GuiCategories::Vic3Draggable,
             WidgetProperty::draggable_by => GuiCategories::Unknown,
             WidgetProperty::drop_target => GuiCategories::Unknown,
             WidgetProperty::droptarget => GuiCategories::Widget,
@@ -289,6 +298,7 @@ impl GuiCategories {
             WidgetProperty::onmousedragstarted => GuiCategories::Unknown,
             WidgetProperty::onmousehierarchyenter => GuiCategories::Widget,
             WidgetProperty::onmousehierarchyleave => GuiCategories::Widget,
+            WidgetProperty::on_receive_drop => GuiCategories::Vic3DropTarget,
             WidgetProperty::onpressed => GuiCategories::Unknown,
             WidgetProperty::onreleased => GuiCategories::Unknown,
             WidgetProperty::onreturnpressed => GuiCategories::Unknown,
