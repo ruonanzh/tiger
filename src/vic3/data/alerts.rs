@@ -105,7 +105,7 @@ impl DbKind for AlertGroup {
 const SCRIPT_CONTEXTS: &[(&str, Scopes)] = &[
     ("player_country", Scopes::Country),
     ("player_decision", Scopes::Country),
-    ("player_country_formation", Scopes::Country),
+    ("player_country_formation", Scopes::CountryFormation),
     ("player_diplomatic_play", Scopes::DiplomaticPlay),
     ("player_diplomatic_pact", Scopes::DiplomaticPact),
     ("player_diplomatic_action", Scopes::DiplomaticAction),

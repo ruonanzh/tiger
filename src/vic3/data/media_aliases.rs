@@ -26,7 +26,10 @@ impl DbKind for MediaAlias {
         let mut vd = Validator::new(block, data);
 
         vd.field_item("video", Item::File);
-        vd.field_item("audio", Item::Sound);
+        vd.field_validated_value("audio", |_, mut vd| {
+            vd.maybe_is("");
+            vd.item(Item::Sound);
+        });
         vd.field_item("texture", Item::File);
         vd.field_item("fallback", Item::MediaAlias);
         check_fallback_cycle(key, block, data);

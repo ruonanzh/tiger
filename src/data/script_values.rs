@@ -1,3 +1,4 @@
+use std::cell::RefCell;
 use std::path::PathBuf;
 use std::sync::RwLock;
 
@@ -159,17 +160,73 @@ pub struct ScriptValue {
     scope_override: Option<Scopes>,
 }
 
+thread_local! {
+    static IN_FLIGHT: RefCell<Vec<InferenceFrame>> = const { RefCell::new(Vec::new()) };
+}
+
+struct InferenceFrame {
+    value: *const ScriptValue,
+    location: Loc,
+    recursive: bool,
+}
+
+struct InferenceGuard;
+
+impl InferenceGuard {
+    fn enter(value: &ScriptValue, location: Loc) -> Option<Self> {
+        IN_FLIGHT.with_borrow_mut(|stack| {
+            if stack
+                .iter()
+                .any(|frame| std::ptr::eq(frame.value, value) && frame.location == location)
+            {
+                // Inferences still on the stack may depend on the skipped call.
+                for frame in stack {
+                    frame.recursive = true;
+                }
+                return None;
+            }
+            stack.push(InferenceFrame { value, location, recursive: false });
+            Some(Self)
+        })
+    }
+
+    fn recursive(&self) -> bool {
+        IN_FLIGHT.with_borrow(|stack| stack.last().unwrap().recursive)
+    }
+}
+
+impl Drop for InferenceGuard {
+    fn drop(&mut self) {
+        IN_FLIGHT.with_borrow_mut(|stack| {
+            stack.pop();
+        });
+    }
+}
+
 impl ScriptValue {
     pub fn new(key: Token, bv: BV, scope_override: Option<Scopes>) -> Self {
         Self { key, bv, cache: RwLock::new(TigerHashMap::default()), scope_override }
     }
 
-    pub fn cached_compat(&self, key: &Token, sc: &mut ScopeContext, data: &Everything) -> bool {
-        if let Some(our_sc) = self.cache.read().unwrap().get(&key.loc) {
-            sc.expect_compatibility(our_sc, key, data);
-            true
-        } else {
-            false
+    fn with_inferred_context(
+        &self,
+        location: Loc,
+        infer: impl FnOnce() -> ScopeContext,
+        apply: impl FnOnce(&ScopeContext),
+    ) {
+        if let Some(context) = self.cache.read().unwrap().get(&location) {
+            apply(context);
+            return;
+        }
+        // Another worker may infer the same call concurrently. It can work independently using
+        // its own stack, avoiding both partial cache hits and waits between recursive callers.
+        let Some(guard) = InferenceGuard::enter(self, location) else {
+            return;
+        };
+        let context = infer();
+        apply(&context);
+        if !guard.recursive() {
+            self.cache.write().unwrap().insert(location, context);
         }
     }
 
@@ -189,24 +246,113 @@ impl ScriptValue {
     }
 
     pub fn validate_call(&self, key: &Token, data: &Everything, sc: &mut ScopeContext) {
-        if !self.cached_compat(key, sc, data) {
-            let mut our_sc = ScopeContext::new_unrooted(Scopes::all(), &self.key);
-            our_sc.set_strict_scopes(false);
-            if self.scope_override.is_some() {
-                our_sc.set_no_warn(true);
-            }
-            self.cache.write().unwrap().insert(key.loc, our_sc.clone());
-            validate_script_value(&self.bv, data, &mut our_sc);
-            if let Some(scopes) = self.scope_override {
-                our_sc = ScopeContext::new_unrooted(scopes, key);
+        self.with_inferred_context(
+            key.loc,
+            || {
+                let mut our_sc = ScopeContext::new_unrooted(Scopes::all(), &self.key);
                 our_sc.set_strict_scopes(false);
-            }
-            sc.expect_compatibility(&our_sc, key, data);
-            self.cache.write().unwrap().insert(key.loc, our_sc);
-        }
+                if self.scope_override.is_some() {
+                    our_sc.set_no_warn(true);
+                }
+                validate_script_value(&self.bv, data, &mut our_sc);
+                if let Some(scopes) = self.scope_override {
+                    our_sc = ScopeContext::new_unrooted(scopes, key);
+                    our_sc.set_strict_scopes(false);
+                }
+                our_sc
+            },
+            |our_sc| sc.expect_compatibility(our_sc, key, data),
+        );
     }
 
     pub fn validate_non_dynamic_call(&self, data: &Everything) {
         validate_non_dynamic_script_value(&self.bv, data);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::mpsc;
+    use std::thread;
+    use std::time::Duration;
+
+    use crate::fileset::{FileKind, FileStage};
+
+    use super::*;
+
+    fn new_value(name: &str) -> ScriptValue {
+        let loc = Loc::for_file(PathBuf::new(), FileStage::NoStage, FileKind::Mod, PathBuf::new());
+        let token = Token::new(name, loc);
+        ScriptValue::new(token.clone(), BV::Value(token), None)
+    }
+
+    #[test]
+    fn overlapping_callers_infer_until_the_shared_context_is_complete() {
+        let value = new_value("parallel");
+        let loc = value.key.loc;
+        let context = || ScopeContext::new(Scopes::None, &value.key);
+        let (started, start_received) = mpsc::channel();
+        let (allow_finish, finish_allowed) = mpsc::channel();
+        thread::scope(|scope| {
+            scope.spawn(|| {
+                value.with_inferred_context(
+                    loc,
+                    move || {
+                        started.send(()).unwrap();
+                        finish_allowed.recv_timeout(Duration::from_secs(5)).unwrap();
+                        context()
+                    },
+                    |_| {},
+                );
+            });
+
+            start_received.recv_timeout(Duration::from_secs(5)).unwrap();
+            assert!(value.cache.read().unwrap().is_empty());
+            let mut inferred = false;
+            value.with_inferred_context(
+                loc,
+                || {
+                    inferred = true;
+                    context()
+                },
+                |_| {},
+            );
+            allow_finish.send(()).unwrap();
+            assert!(inferred, "the concurrent caller must infer its own context");
+        });
+        value.with_inferred_context(loc, || panic!("complete context should be cached"), |_| {});
+    }
+
+    #[test]
+    fn recursive_calls_unwind_without_caching_incomplete_context() {
+        let first = new_value("first");
+        let second = new_value("second");
+        let loc = first.key.loc;
+        let context = || ScopeContext::new(Scopes::None, &first.key);
+        let mut second_applied = false;
+        first.with_inferred_context(
+            loc,
+            || {
+                second.with_inferred_context(
+                    loc,
+                    || {
+                        first.with_inferred_context(
+                            loc,
+                            || panic!("the first value is already on this thread's stack"),
+                            |_| panic!("recursive call has no completed context"),
+                        );
+                        context()
+                    },
+                    |_| second_applied = true,
+                );
+                context()
+            },
+            |_| {},
+        );
+        assert!(second_applied, "the same location may call a different script value");
+        assert!(first.cache.read().unwrap().is_empty());
+        assert!(second.cache.read().unwrap().is_empty());
+        first.with_inferred_context(loc, context, |_| {});
+        assert!(first.cache.read().unwrap().contains_key(&loc));
     }
 }

@@ -96,7 +96,7 @@ impl DbKind for DiplomaticCatalyst {
             });
         });
 
-        vd.field_validated_block("ai_country_goal_recalculation", |block, data| {
+        vd.multi_field_validated_block("ai_country_goal_recalculation", |block, data| {
             let mut vd = Validator::new(block, data);
             let mut sc = catalyst_context();
             sc.define_name("new_diplomatic_relation", Scopes::Bool, key);

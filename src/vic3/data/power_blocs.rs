@@ -26,7 +26,11 @@ impl PowerBlocCoaPiece {
 
 impl DbKind for PowerBlocCoaPiece {
     fn validate(&self, key: &Token, block: &Block, data: &Everything) {
-        let pathname = format!("gfx/coat_of_arms/colored_emblems/{key}");
+        let directory = match block.get_field_value("piece").map(Token::as_str) {
+            Some("shield_frame" | "top" | "side") => "textured_emblems",
+            _ => "colored_emblems",
+        };
+        let pathname = format!("gfx/coat_of_arms/{directory}/{key}");
         data.verify_exists_implied(Item::File, &pathname, key);
 
         let mut vd = Validator::new(block, data);

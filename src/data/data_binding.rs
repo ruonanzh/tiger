@@ -90,9 +90,10 @@ impl DataBinding {
         if let Some(def) = block.get_field_value("definition")
             && let Some((_, paramsx)) = def.split_once('(')
             && let Some((arguments, _)) = paramsx.split_once(')')
+            && !arguments.trim().is("")
         {
             for param in arguments.split(',') {
-                params.push(param);
+                params.push(param.trim());
             }
         }
         let mut body = None;

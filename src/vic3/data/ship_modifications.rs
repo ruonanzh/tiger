@@ -1,4 +1,5 @@
 use crate::block::Block;
+use crate::context::ScopeContext;
 use crate::db::{Db, DbKind};
 use crate::everything::Everything;
 use crate::game::GameFlags;
@@ -55,7 +56,11 @@ impl DbKind for ShipModification {
         vd.field_list_items("unlocking_technologies", Item::Technology);
         vd.multi_field_item("incompatible_with", Item::ShipModification);
 
-        vd.field_script_value_no_breakdown_rooted("ai_weight", Scopes::Country);
+        vd.field_script_value_no_breakdown_builder("ai_weight", |key| {
+            let mut sc = ScopeContext::new(Scopes::Country, key);
+            sc.define_name("ship_modification_type", Scopes::ShipModificationType, key);
+            sc
+        });
 
         // undocumented
 

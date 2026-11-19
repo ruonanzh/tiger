@@ -61,6 +61,11 @@ fn checks_theme_assets_when_dlc_payload_is_available() {
             "other_pack = { category = ui_skin_theme dlc = dlc778 ui_skin = other_pack_typo }\n",
             "existing_skin = { category = ui_skin_theme dlc = dlc777 ui_skin = recovered_skin }\n",
             "default_skin = { category = ui_skin_theme dlc = dlc777 ui_skin = default }\n",
+            "main_menu_image_fixture = { category = main_menu_image_theme dlc = dlc777 video = dlc/dlc777_fixture/gfx/interface/illustrations/frontend/menu_video.bk2 }\n",
+            "papermap_fixture = { category = papermap_theme dlc = dlc777 papermap_textures_file = gfx/map/textures/maptextures_fixture.settings }\n",
+            "bad_pack = { category = main_menu_image_theme dlc = dlc777 video = dlc/dlc778_fixture/gfx/interface/illustrations/frontend/menu_video.bk2 }\n",
+            "bad_path = { category = main_menu_image_theme dlc = dlc777 video = dlc/dlc777_fixture/../gfx/interface/illustrations/frontend/menu_video.bk2 }\n",
+            "papermap_typo = { category = papermap_theme dlc = dlc777 papermap_textures_file = gfx/map/textures/maptextures_misspelled.settings }\n",
         ),
     );
     write(&mod_root, "gfx/skins/recovered.skin", "name = recovered_skin\nfolder = gfx/skins");
@@ -136,9 +141,15 @@ fn checks_theme_assets_when_dlc_payload_is_available() {
         {
             assert!(!has_missing(line, text), "{missing_assets:#?}");
         }
-        for (line, text) in
-            [(5, "pdxmesh"), (6, "expected value"), (8, "missing.bk2"), (9, "unknown_dlc_field")]
-        {
+        for (line, text) in [
+            (5, "pdxmesh"),
+            (6, "expected value"),
+            (8, "missing.bk2"),
+            (9, "unknown_dlc_field"),
+            (20, "dlc778_fixture"),
+            (21, "/../"),
+            (22, "maptextures_misspelled.settings"),
+        ] {
             assert!(
                 other_diagnostics.iter().any(|(nr, msg)| *nr == line && msg.contains(text)),
                 "{other_diagnostics:#?}"
@@ -148,10 +159,18 @@ fn checks_theme_assets_when_dlc_payload_is_available() {
             assert!(note_lines.is_empty(), "{note_lines:#?}");
             assert!(has_missing(1, "vanilla_missing"), "{missing_assets:#?}");
             assert!(has_missing(3, "provider_mesh"), "{missing_assets:#?}");
+            assert!(
+                other_diagnostics
+                    .iter()
+                    .any(|(line, msg)| { *line == 18 && msg.contains("menu_video.bk2") })
+            );
+            assert!(other_diagnostics.iter().any(|(line, msg)| {
+                *line == 19 && msg.contains("maptextures_fixture.settings")
+            }));
         } else {
             note_lines.sort_unstable();
             let mut expected =
-                vec![(THEMES.into(), vec![1, 3, 4]), (VANILLA_THEMES.into(), vec![1])];
+                vec![(THEMES.into(), vec![1, 3, 4, 18, 19]), (VANILLA_THEMES.into(), vec![1])];
             expected.sort_unstable();
             assert_eq!(note_lines, expected);
             assert!(!has_missing(1, "vanilla_missing"), "{missing_assets:#?}");

@@ -195,20 +195,17 @@ impl DbKind for TreatyArticle {
         vd.multi_field_validated_block("requirement_to_maintain", |block, data| {
             let mut vd = Validator::new(block, data);
             vd.field_trigger_builder("trigger", Tooltipped::Yes, |key| {
-                build_article_treaty_sc(key, is_directed)
+                build_article_trigger_sc(key, is_directed)
             });
             vd.field_trigger_builder("show_about_to_break_warning", Tooltipped::No, |key| {
-                build_article_treaty_sc(key, is_directed)
+                build_article_trigger_sc(key, is_directed)
             });
         });
-        vd.field_trigger_builder("can_ratify", Tooltipped::Yes, |key| {
-            build_article_treaty_sc(key, is_directed)
-        });
-        vd.field_trigger_builder("can_propose", Tooltipped::Yes, |key| {
-            let mut sc = build_article_sc_with_root(key, is_directed, Scopes::TreatyArticle);
-            sc.define_name("treaty", Scopes::Treaty, key);
-            sc
-        });
+        for trigger in ["can_ratify", "can_propose"] {
+            vd.field_trigger_builder(trigger, Tooltipped::Yes, |key| {
+                build_article_trigger_sc(key, is_directed)
+            });
+        }
 
         for active in &["on_entry_into_force", "on_enforced"] {
             vd.field_effect_builder(active, Tooltipped::Yes, |key| {
@@ -352,6 +349,12 @@ fn build_article_sc_with_root(key: &Token, is_directed: bool, root: Scopes) -> S
         sc.define_name("first_country", Scopes::Country, key);
         sc.define_name("second_country", Scopes::Country, key);
     }
+    sc
+}
+
+fn build_article_trigger_sc(key: &Token, is_directed: bool) -> ScopeContext {
+    let mut sc = build_article_sc_with_root(key, is_directed, Scopes::TreatyArticle);
+    sc.define_name("treaty", Scopes::Treaty, key);
     sc
 }
 

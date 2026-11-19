@@ -389,7 +389,7 @@ pub fn validate_create_ship(
 pub fn validate_create_character(
     key: &Token,
     block: &Block,
-    data: &Everything,
+    _data: &Everything,
     sc: &mut ScopeContext,
     mut vd: Validator,
     _tooltipped: Tooltipped,
@@ -414,14 +414,10 @@ pub fn validate_create_character(
         vd.item_or_target(sc, Item::Culture, Scopes::Culture);
     });
     vd.field_item_or_target("religion", sc, Item::Religion, Scopes::Religion);
-    if let Some(role) = vd.field_value("role") {
-        if !data.item_exists(Item::CharacterRole, role.as_str())
-            && !data.item_exists(Item::CharacterArchetype, role.as_str())
-        {
-            let msg = "`{role}` not found as character role or character archetype";
-            err(ErrorKey::MissingItem).msg(msg).loc(role).push();
-        }
-    }
+    vd.multi_field_validated_value("role", |_, mut vd| {
+        vd.maybe_item(Item::CharacterArchetype);
+        vd.item(Item::CharacterRole);
+    });
     vd.field_validated_value("female", |_, mut vd| {
         vd.maybe_bool();
         vd.target(sc, Scopes::Character);
@@ -641,7 +637,7 @@ pub fn validate_create_military_formation(
     if let Some(name) = vd.field_identifier("save_temporary_scope_as", "scope name") {
         sc.define_name_token(name.as_str(), Scopes::MilitaryFormation, name, Temporary::Yes);
     }
-    vd.field_validated_block("ship", |block, data| {
+    vd.multi_field_validated_block("ship", |block, data| {
         let mut vd = Validator::new(block, data);
         vd.field_target("type", sc, Scopes::ShipType);
         vd.field_integer("count");

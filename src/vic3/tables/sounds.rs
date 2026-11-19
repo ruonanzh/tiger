@@ -1,5 +1,8 @@
+use std::fs::read_to_string;
+use std::path::Path;
 use std::sync::LazyLock;
 
+use crate::fileset::Fileset;
 use crate::helpers::TigerHashSet;
 use crate::lowercase::Lowercase;
 
@@ -11,6 +14,34 @@ pub static SOUNDS_SET: LazyLock<TigerHashSet<Lowercase<'static>>> = LazyLock::ne
     }
     set
 });
+
+/// Read FMOD event and snapshot paths from the installed audio catalog.
+pub(crate) fn load_guid_paths(fileset: &Fileset) -> TigerHashSet<String> {
+    let path = Path::new("sound/GUIDs.txt");
+    let Some(entry) = fileset.get_files_under(path).iter().find(|entry| entry.path() == path)
+    else {
+        return TigerHashSet::default();
+    };
+    let Ok(content) = read_to_string(entry.fullpath()) else {
+        return TigerHashSet::default();
+    };
+
+    content
+        .lines()
+        .filter_map(|line| {
+            let (guid, path) = line.split_once(char::is_whitespace)?;
+            let path = path.trim();
+            if guid.trim_start_matches('\u{feff}').starts_with('{')
+                && guid.ends_with('}')
+                && (path.starts_with("event:/") || path.starts_with("snapshot:/"))
+            {
+                Some(path.to_ascii_lowercase())
+            } else {
+                None
+            }
+        })
+        .collect()
+}
 
 // LAST UPDATED VIC3 VERSION 1.7.1
 // Taken from the object browser

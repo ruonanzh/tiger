@@ -563,6 +563,29 @@ pub fn validate_datatypes(
             if let Some(alternative) = lookup_alternative(code.name.as_str()) {
                 let info = format!("did you mean {alternative}?");
                 warn(ErrorKey::Datafunctions).msg(msg).info(info).loc(&code.name).push();
+            } else if Game::is_vic3()
+                && is_first
+                && code.arguments.is_empty()
+                && code.name.loc.pathname().starts_with("gui/gui_editor")
+                && matches!(
+                    code.name.as_str(),
+                    "GuiEditor"
+                        | "GuiEditorCategory"
+                        | "GuiEditorDockable"
+                        | "GuiEditorOutliner"
+                        | "GuiEditorProperties"
+                        | "GuiEditorProperty"
+                        | "SelectionLine"
+                )
+            {
+                // The bundled Clausewitz editor uses these datacontexts, which are
+                // present in other Clausewitz games' dumps but absent from Vic3's.
+                warn(ErrorKey::Datafunctions)
+                    .weak()
+                    .msg(msg)
+                    .info("Bundled Clausewitz editor datacontext is absent from the Vic3 data type dump")
+                    .loc(&code.name)
+                    .push();
             } else {
                 warn(ErrorKey::Datafunctions).msg(msg).loc(&code.name).push();
             }

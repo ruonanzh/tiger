@@ -79,7 +79,7 @@ const ITERATOR: &[(Scopes, &str, Scopes)] = &[
             .union(Scopes::StateRegion)
             .union(Scopes::StrategicRegion),
         "harvest_condition",
-        Scopes::HarvestConditionType,
+        Scopes::HarvestCondition,
     ),
     (Scopes::None, "in_global_list", Scopes::all_but_none()),
     (Scopes::Country, "in_hierarchy", Scopes::Country),

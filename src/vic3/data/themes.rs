@@ -71,6 +71,27 @@ impl Theme {
         .then_some(dlc)
     }
 
+    fn check_dlc_file(
+        mut value: ValueValidator,
+        absent_dlc: Option<&Token>,
+        is_payload_path: impl FnOnce(&str, &str) -> bool,
+    ) {
+        let token = value.value();
+        if let Some(dlc) = absent_dlc
+            && is_payload_path(token.as_str(), dlc.as_str())
+            && !value.data().item_exists(Item::File, token.as_str())
+        {
+            value.data().optional_theme_assets.record(dlc, Item::File, token);
+            value.accept();
+        } else {
+            value.item(Item::File);
+        }
+    }
+
+    fn is_payload_name(name: &str) -> bool {
+        !name.is_empty() && name.bytes().all(|ch| ch.is_ascii_alphanumeric() || ch == b'_')
+    }
+
     fn check_asset(mut value: ValueValidator, kind: Item, absent_dlc: Option<&Token>) {
         let token = value.value();
         if let Some(dlc) = absent_dlc
@@ -95,6 +116,7 @@ impl DbKind for Theme {
         let loca = format!("{key}_desc");
         data.verify_exists_implied(Item::Localization, &loca, key);
 
+        let absent_dlc = Self::absent_dlc(block, data);
         vd.req_field("category");
         vd.field_choice("category", THEME_CATEGORIES);
         if let Some(category) = block.get_field_value("category") {
@@ -107,7 +129,14 @@ impl DbKind for Theme {
                 "docs say map_textures, but it's papermap_textures_file",
             );
             if category.is("papermap_theme") {
-                vd.field_item("papermap_textures_file", Item::File);
+                vd.field_validated_value("papermap_textures_file", |_, value| {
+                    Self::check_dlc_file(value, absent_dlc, |path, _| {
+                        key.as_str().strip_prefix("papermap_").is_some_and(|name| {
+                            Self::is_payload_name(name)
+                                && path == format!("gfx/map/textures/maptextures_{name}.settings")
+                        })
+                    });
+                });
             } else {
                 vd.ban_field("papermap_textures_file", || "category papermap_theme");
             }
@@ -115,7 +144,6 @@ impl DbKind for Theme {
 
         vd.field_trigger_rooted("selectable", Tooltipped::No, Scopes::None);
 
-        let absent_dlc = Self::absent_dlc(block, data);
         vd.advice_field("skin", "docs say skin, but it's ui_skin");
         vd.field_validated_value("ui_skin", |_, mut value| {
             if value.value().is("default") {
@@ -146,8 +174,19 @@ impl DbKind for Theme {
 
         // undocumented
 
-        // TODO: is this only for main_menu_image_theme ?
-        vd.field_item("video", Item::File);
+        vd.field_validated_value("video", |_, value| {
+            Self::check_dlc_file(value, absent_dlc, |path, dlc| {
+                block.field_value_is("category", "main_menu_image_theme")
+                    && path
+                        .strip_prefix(&format!("dlc/{dlc}_"))
+                        .and_then(|rest| {
+                            rest.strip_suffix(
+                                "/gfx/interface/illustrations/frontend/menu_video.bk2",
+                            )
+                        })
+                        .is_some_and(Self::is_payload_name)
+            });
+        });
     }
 }
 

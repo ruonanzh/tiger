@@ -82,6 +82,10 @@ pub fn validate_property(
         }
         GuiValidation::Align => {
             if let Some(value) = bv.expect_value() {
+                if GameFlags::game() == GameFlags::Vic3 && value.starts_with("[") {
+                    validate_datatype_field(Datatype::Unknown, key, bv, data, dc, false);
+                    return;
+                }
                 for part in value.split('|') {
                     if !ALIGN.contains(&part.as_str()) {
                         let msg = format!("unknown {key} {part}");

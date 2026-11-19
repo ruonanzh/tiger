@@ -202,12 +202,30 @@ impl LocaParser {
     }
 
     fn parse_macros(&mut self) {
-        // TODO: vanilla uses $[DATE_MIN.GetStringShort|V]$ which breaks all my assumptions
         let mut v = Vec::new();
         let mut loc = self.loc;
         let mut offset = self.offset;
+        let mut code_end = None;
         while let Some(&c) = self.chars.peek() {
             if c == '$' {
+                // Vic3 accepts a code expression where a localization key would go.
+                // Preserve the outer pair for ValueParser and still expand $keys$ in arguments.
+                if code_end == Some(self.offset) {
+                    code_end = None;
+                    self.next_char();
+                    continue;
+                }
+                if Game::is_vic3()
+                    && code_end.is_none()
+                    && let Some(value) = self.content.get(self.offset..self.loca_end)
+                    && let Some(inner) = value.strip_prefix("$[")
+                    && let Some((code, rest)) = inner.split_once(']')
+                    && rest.starts_with('$')
+                {
+                    code_end = Some(self.offset + code.len() + "$[]".len());
+                    self.next_char();
+                    continue;
+                }
                 let s = &self.content[offset..self.offset];
                 v.push(MacroValue::Text(Token::from_static_str(s, loc)));
 
@@ -526,7 +544,6 @@ impl<'a> ValueParser<'a> {
             if self.peek() == Some('\'') {
                 self.next_char();
                 let loc = self.loc;
-                let mut parens: isize = 0;
                 let mut text = self.start_text();
                 while let Some(c) = self.peek() {
                     match c {
@@ -536,12 +553,6 @@ impl<'a> ValueParser<'a> {
                             let info = "Using [ ] inside argument strings does not work";
                             warn(ErrorKey::Localization).msg(msg).info(info).loc(self.loc).push();
                         }
-                        ')' if parens == 0 => warn(ErrorKey::Localization)
-                            .msg("possible unterminated argument string")
-                            .loc(self.loc)
-                            .push(),
-                        '(' => parens += 1,
-                        ')' => parens -= 1,
                         '\u{feff}' => {
                             let msg = "found unicode BOM in middle of file";
                             warn(ErrorKey::ParseError).strong().msg(msg).loc(loc).push();
@@ -552,6 +563,10 @@ impl<'a> ValueParser<'a> {
                     self.next_char();
                 }
                 if self.peek() != Some('\'') {
+                    warn(ErrorKey::Localization)
+                        .msg("unterminated argument string")
+                        .loc(loc)
+                        .push();
                     self.value.push(LocaValue::Error);
                     return Vec::new();
                 }
@@ -708,6 +723,11 @@ impl<'a> ValueParser<'a> {
                             state = State::InKey(String::new());
                         } else if c.is_alphanumeric() || c == '_' {
                             s.push(c);
+                        } else if Game::is_vic3() && c == '[' {
+                            // A data function can supply the markup key, for example a morale color.
+                            s.push('[');
+                            self.parse_code();
+                            consumed = true;
                         } else {
                             break;
                         }
@@ -776,6 +796,10 @@ impl<'a> ValueParser<'a> {
             }
             if self.peek().is_none_or(char::is_whitespace) {
                 self.next_char();
+            } else if self.content[self.content_idx].as_str()[self.offset..].starts_with("\\n") {
+                // An escaped newline separates the markup key from its text.
+                // Preserve the newline as text.
+                self.parse_escape();
             } else {
                 let msg = "#markup should be followed by a space";
                 warn(ErrorKey::Markup).msg(msg).loc(self.loc).push();

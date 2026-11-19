@@ -105,7 +105,7 @@ impl DbKind for CharacterTemplate {
             vd.maybe_is("default");
             vd.item(Item::CommanderRank);
         });
-        vd.field_validated_value("role", |_, mut vd| {
+        vd.multi_field_validated_value("role", |_, mut vd| {
             vd.maybe_item(Item::CharacterArchetype);
             vd.item(Item::CharacterRole);
         });

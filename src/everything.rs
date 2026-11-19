@@ -137,6 +137,9 @@ pub struct Everything {
     /// Tracks all the files (vanilla and mods) that are relevant to the current validation.
     pub(crate) fileset: Fileset,
 
+    #[cfg(feature = "vic3")]
+    vic3_sound_paths: TigerHashSet<String>,
+
     /// Tracks specifically the .dds files, and their formats and sizes.
     pub(crate) dds: DdsFiles,
 
@@ -518,9 +521,18 @@ impl Everything {
             }
         }
 
+        #[cfg(feature = "vic3")]
+        let vic3_sound_paths = if Game::is_vic3() {
+            crate::vic3::tables::sounds::load_guid_paths(&fileset)
+        } else {
+            TigerHashSet::default()
+        };
+
         Ok(Everything {
             parser: ParserMemory::default(),
             fileset,
+            #[cfg(feature = "vic3")]
+            vic3_sound_paths,
             dds: DdsFiles::default(),
             config,
             #[cfg(any(feature = "ck3", feature = "vic3"))]
@@ -1534,6 +1546,10 @@ impl Everything {
         if let Some(filename) = name.strip_prefix("file:/") {
             self.fileset.exists(filename)
         } else {
+            #[cfg(feature = "vic3")]
+            if Game::is_vic3() && self.vic3_sound_paths.contains(Lowercase::new(name).as_str()) {
+                return true;
+            }
             let sounds_set = match Game::game() {
                 #[cfg(feature = "ck3")]
                 Game::Ck3 => &crate::ck3::tables::sounds::SOUNDS_SET,
