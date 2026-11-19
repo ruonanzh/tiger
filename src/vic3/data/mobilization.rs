@@ -4,7 +4,8 @@ use crate::db::{Db, DbKind};
 use crate::everything::Everything;
 use crate::game::GameFlags;
 use crate::item::{Item, ItemLoader};
-use crate::modif::validate_modifs;
+use crate::modif::{validate_modifs, validate_modifs_with_flow};
+use crate::report::{ErrorKey, warn};
 use crate::scopes::Scopes;
 use crate::token::Token;
 use crate::tooltipped::Tooltipped;
@@ -70,7 +71,17 @@ impl DbKind for MobilizationOption {
         });
         vd.field_validated_block("unit_modifier", |block, data| {
             let vd = Validator::new(block, data);
-            validate_modifs(block, data, ModifKinds::MilitaryFormation, vd);
+            validate_modifs_with_flow(block, data, ModifKinds::MilitaryFormation, vd, |from, target, token| {
+                if target == ModifKinds::Battle {
+                    warn(ErrorKey::Modifiers)
+                        .msg(format!("`{token}` is a battle modifier and will not flow from unit_modifier"))
+                        .info("The mobilization option's unit_modifier applies to mobilized units.")
+                        .loc(token)
+                        .push();
+                } else {
+                    from.require_from(target, token, None, crate::Severity::Error);
+                }
+            });
         });
 
         // Docs say it's Militaryformation, but the only example in vanilla contradicts that.

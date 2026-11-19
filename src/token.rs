@@ -158,22 +158,33 @@ pub struct Token {
     s: &'static str,
     pub loc: Loc,
     quoted: bool,
+    inline_calculation: bool,
 }
 
 impl Token {
     #[must_use]
     pub fn new(s: &str, loc: Loc) -> Self {
-        Token { s: bump(s), loc, quoted: false }
+        Token { s: bump(s), loc, quoted: false, inline_calculation: false }
     }
 
     #[must_use]
     pub fn from_static_str(s: &'static str, loc: Loc) -> Self {
-        Token { s, loc, quoted: false }
+        Token { s, loc, quoted: false, inline_calculation: false }
     }
 
     pub(crate) fn with_quotes(mut self) -> Self {
         self.quoted = true;
         self
+    }
+
+    pub(crate) fn with_inline_calculation(mut self) -> Self {
+        self.inline_calculation = true;
+        self
+    }
+
+    #[cfg(feature = "jomini")]
+    pub(crate) fn is_inline_calculation(&self) -> bool {
+        self.inline_calculation
     }
 
     pub(crate) fn is_quoted(&self) -> bool {
@@ -186,7 +197,7 @@ impl Token {
     where
         R: RangeBounds<usize> + SliceIndex<str, Output = str>,
     {
-        Token { s: &self.s[range], loc, quoted: false }
+        Token { s: &self.s[range], loc, quoted: false, inline_calculation: false }
     }
 
     /// Create a `Token` from a subtring of the given `Token`,
@@ -218,7 +229,7 @@ impl Token {
                 break;
             }
         }
-        Token { s: &self.s[range], loc, quoted: false }
+        Token { s: &self.s[range], loc, quoted: false, inline_calculation: false }
     }
 
     pub fn as_str(&self) -> &'static str {
@@ -503,7 +514,7 @@ impl Borrow<str> for &Token {
 
 impl From<Loc> for Token {
     fn from(loc: Loc) -> Self {
-        Token { s: "", loc, quoted: false }
+        Token { s: "", loc, quoted: false, inline_calculation: false }
     }
 }
 

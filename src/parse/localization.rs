@@ -30,6 +30,7 @@ struct LocaParser {
     chars: Peekable<Chars<'static>>,
     language: Language,
     expecting_language: bool,
+    language_confirmed: bool,
     loca_end: usize,
     value: Vec<LocaValue>,
     pending_line_ignores: Vec<IgnoreFilter>,
@@ -61,7 +62,17 @@ impl LocaParser {
                 chars.next();
             }
         } else {
-            warn(ErrorKey::Encoding).msg("Expected UTF-8 BOM encoding").abbreviated(loc).push();
+            crate::report::report(
+                ErrorKey::Encoding,
+                if Game::is_vic3() {
+                    crate::report::Severity::Tips
+                } else {
+                    crate::report::Severity::Warning
+                },
+            )
+            .msg("Expected UTF-8 BOM encoding")
+            .abbreviated(loc)
+            .push();
         }
 
         // From here on we are reporting on file content
@@ -74,6 +85,7 @@ impl LocaParser {
             chars,
             language: lang,
             expecting_language: true,
+            language_confirmed: false,
             value: Vec::new(),
             loca_end: 0,
             pending_line_ignores: Vec::new(),
@@ -129,7 +141,7 @@ impl LocaParser {
     #[allow(clippy::unnecessary_wraps)]
     fn error_line(&mut self, key: Token) -> Option<LocaEntry> {
         self.skip_line();
-        Some(LocaEntry::new(key, LocaValue::Error, None))
+        Some(LocaEntry::new(key, LocaValue::Error, None, false))
     }
 
     fn get_key(&mut self) -> Token {
@@ -180,7 +192,11 @@ impl LocaParser {
             let loc = self.loc;
             let mut text = String::new();
             while let Some(&c) = self.chars.peek() {
-                if c == '$' || c == ']' || c == '\n' {
+                if c == '$'
+                    || c == ']'
+                    || c == '\n'
+                    || (Game::is_vic3() && self.offset >= self.loca_end)
+                {
                     break;
                 }
                 text.push(c);
@@ -199,6 +215,63 @@ impl LocaParser {
             }
         }
         false
+    }
+
+    fn is_currency_dollar(&self) -> bool {
+        let rest = &self.content[self.offset + 1..self.loca_end];
+        let after_key = rest.trim_start_matches(is_key_char);
+        if after_key.starts_with(['$', '|']) {
+            return false;
+        }
+
+        if rest.len() == 1 && ".,;:!?".contains(rest) {
+            // A standalone currency symbol can end a prose sentence.
+            return true;
+        }
+
+        // A numeric amount can follow the symbol (including after a space) or
+        // precede it. Prefer a possible closing delimiter over currency, so an
+        // invalid but clearly delimited substitution still gets diagnosed.
+        let amount = rest.trim_start();
+        let after_digits = amount.trim_start_matches(|c: char| c.is_ascii_digit());
+        let numeric_prefix = amount.len() != after_digits.len()
+            && !after_digits.starts_with(|c: char| c.is_ascii_alphabetic() || c == '_');
+        if numeric_prefix {
+            let mut after_amount = after_digits;
+            while let Some(group) = after_amount.strip_prefix([',', '.']) {
+                let rest = group.trim_start_matches(|c: char| c.is_ascii_digit());
+                if group.len() == rest.len() {
+                    break;
+                }
+                after_amount = rest;
+            }
+            if let Some(unit) = after_amount.strip_prefix('/')
+                && unit.starts_with(char::is_alphabetic)
+            {
+                let boundary = unit.trim_start_matches(char::is_alphanumeric);
+                if boundary.is_empty()
+                    || boundary.starts_with(|c: char| c.is_whitespace() || ".,;:!?)]".contains(c))
+                {
+                    // A unit rate such as $248/m3 has a complete amount and unit.
+                    // A later suffix dollar or substitution belongs to a separate token.
+                    return true;
+                }
+            }
+        }
+        let numeric_suffix =
+            self.content[..self.offset].trim_end().ends_with(|c: char| c.is_ascii_digit())
+                && (rest.is_empty()
+                    || rest.starts_with(|c: char| c.is_whitespace() || "/.,;:!?)]".contains(c)));
+        if !numeric_prefix && !numeric_suffix {
+            return false;
+        }
+
+        !rest.split_once('$').is_some_and(|(_, tail)| {
+            tail.is_empty()
+                || (!tail.starts_with(is_key_char)
+                    && !tail.starts_with('/')
+                    && !tail.trim_start().starts_with(|c: char| c.is_ascii_digit()))
+        })
     }
 
     fn parse_macros(&mut self) {
@@ -226,11 +299,22 @@ impl LocaParser {
                     self.next_char();
                     continue;
                 }
+                if Game::is_vic3() && self.is_currency_dollar() {
+                    self.next_char();
+                    continue;
+                }
                 let s = &self.content[offset..self.offset];
                 v.push(MacroValue::Text(Token::from_static_str(s, loc)));
 
+                let dollar = self.offset;
+                let dollar_loc = self.loc;
                 if let Some(mv) = self.parse_keyword() {
                     v.push(mv);
+                } else if Game::is_vic3() {
+                    // Keep malformed substitutions as text so later independent expressions
+                    // in the same localization value are still validated.
+                    let raw = &self.content[dollar..self.offset];
+                    v.push(MacroValue::Text(Token::from_static_str(raw, dollar_loc)));
                 } else {
                     self.value.push(LocaValue::Error);
                     return;
@@ -239,8 +323,13 @@ impl LocaParser {
                 offset = self.offset;
             } else if c == '"' && self.offset == self.loca_end {
                 let s = &self.content[offset..self.offset];
-                v.push(MacroValue::Text(Token::from_static_str(s, loc)));
-                self.value.push(LocaValue::Macro(v));
+                let text = Token::from_static_str(s, loc);
+                if Game::is_vic3() && v.is_empty() {
+                    self.value = ValueParser::new_localization(vec![(&text, false)]).parse_vec();
+                } else {
+                    v.push(MacroValue::Text(text));
+                    self.value.push(LocaValue::Macro(v));
+                }
                 self.next_char();
                 return;
             } else {
@@ -253,21 +342,70 @@ impl LocaParser {
     }
 
     fn parse_keyword(&mut self) -> Option<MacroValue> {
+        let dollar = self.offset;
         self.next_char(); // Skip the $
         let loc = self.loc;
         let start_offset = self.offset;
         let key = self.get_key();
         let end_offset = self.offset;
-        self.parse_format();
-        if self.chars.peek() != Some(&'$') {
-            // TODO: check if there is a closing $, adapt warning text
-            let msg = "didn't recognize a key between $";
-            warn(ErrorKey::Localization).weak().msg(msg).loc(key).push();
+        let format = self.parse_format();
+        if self.chars.peek() != Some(&'$')
+            || (Game::is_vic3() && (key.as_str().is_empty() || self.offset >= self.loca_end))
+        {
+            if Game::is_vic3() {
+                self.report_invalid_substitution(dollar, &key);
+            } else {
+                let msg = "didn't recognize a key between $";
+                warn(ErrorKey::Localization).weak().msg(msg).loc(key).push();
+            }
             return None;
         }
         self.next_char();
         let s = &self.content[start_offset..end_offset];
-        Some(MacroValue::Keyword(Token::from_static_str(s, loc)))
+        let quoted = Game::is_vic3() && format.is_some_and(|format| format.is("q"));
+        Some(MacroValue::Keyword(Token::from_static_str(s, loc), quoted))
+    }
+
+    fn report_invalid_substitution(&mut self, dollar: usize, key: &Token) {
+        let remainder = &self.content[self.offset..self.loca_end];
+        let before = &self.content[..dollar];
+        let apparent_close = remainder.split_once('$').filter(|(gap, after)| {
+            let after_key = after.trim_start_matches(is_key_char);
+            // A later substitution with its own key must stay available for parsing.
+            let opens_next = after_key.len() < after.len() && after_key.starts_with(['$', '|']);
+            !opens_next && !gap.contains(['[', ']', '"', '\n'])
+        });
+
+        let ambiguous_text = apparent_close.is_some_and(|(gap, after)| {
+            let body = &self.content[dollar + 1..self.offset + gap.len()];
+            !before.trim_end().ends_with(['"', '\''])
+                && !after.starts_with('\'')
+                && body.trim().contains(' ')
+                && body.chars().all(|c| c.is_alphabetic() || c.is_whitespace() || c == '.')
+        });
+        let key_started = key.as_str().starts_with(|c: char| c.is_alphanumeric() || c == '_');
+        let code_started = self.content[dollar + 1..self.loca_end].starts_with('[');
+        let trailing_key = before.chars().rev().take_while(|c| is_key_char(*c)).any(|c| c == '_');
+        let definite = !ambiguous_text
+            && (key_started || code_started || trailing_key || apparent_close.is_some());
+
+        let msg = "didn't recognize a key between $";
+        if definite {
+            warn(ErrorKey::Localization)
+                .msg(msg)
+                .info("Use a single localization key enclosed in $ delimiters")
+                .loc(key)
+                .push();
+        } else {
+            tips(ErrorKey::Localization).weak().msg(msg).loc(key).push();
+        }
+
+        if let Some((gap, _)) = apparent_close {
+            let end = self.offset + gap.len() + 1;
+            while self.offset < end {
+                self.next_char();
+            }
+        }
     }
 
     fn get_rest_of_line(&mut self) -> &str {
@@ -342,7 +480,10 @@ impl LocaParser {
             return self.error_line(key);
         }
 
-        // Skip optional number after :
+        // Read the optional revision number even when separated by whitespace in Vic3.
+        if Game::is_vic3() {
+            self.skip_linear_whitespace();
+        }
         while let Some(c) = self.chars.peek() {
             if c.is_ascii_digit() {
                 self.next_char();
@@ -355,7 +496,8 @@ impl LocaParser {
         // Now we should see the value. But what if the line ends here?
         if matches!(self.chars.peek(), Some('#' | '\n') | None) {
             if self.expecting_language {
-                if !key.is(&format!("l_{}", self.language)) {
+                self.language_confirmed = key.is(&format!("l_{}", self.language));
+                if !self.language_confirmed {
                     let msg = format!("wrong language header, should be `l_{}:`", self.language);
                     warn(ErrorKey::Localization).msg(msg).loc(key).push();
                 }
@@ -399,25 +541,29 @@ impl LocaParser {
         // we don't know how to parse the results until we know what to
         // substitute. If there are macros in the line, return it as a special
         // `LocaValue::Macro` array
-        if self.line_has_macros() {
+        if Game::is_vic3() && s == "[" {
+            // The base game localizes an opening bracket as its own key.
+            self.value.push(LocaValue::Text(token.clone()));
+            while self.offset <= self.loca_end {
+                self.next_char();
+            }
+        } else if self.line_has_macros() {
             self.parse_macros();
             if matches!(self.value.last(), Some(&LocaValue::Error)) {
                 return self.error_line(key);
             }
         } else {
-            self.value = ValueParser::new(vec![&token]).parse_vec();
+            self.value = ValueParser::new_localization(vec![(&token, false)]).parse_vec();
             while self.offset <= self.loca_end {
                 self.next_char();
             }
         }
 
         self.skip_linear_whitespace();
-        match self.chars.peek() {
-            None | Some('#' | '\n') => (),
-            _ => {
-                let msg = "content after final `\"` on line";
-                warn(ErrorKey::Localization).strong().msg(msg).loc(self.loc).push();
-            }
+        let clean_terminator = matches!(self.chars.peek(), None | Some('#' | '\n'));
+        if !clean_terminator {
+            let msg = "content after final `\"` on line";
+            warn(ErrorKey::Localization).strong().msg(msg).loc(self.loc).push();
         }
 
         self.skip_line();
@@ -426,8 +572,23 @@ impl LocaParser {
         } else {
             LocaValue::Concat(take(&mut self.value))
         };
-        Some(LocaEntry::new(key, value, Some(token)))
+        let source_value_unambiguous =
+            Game::is_vic3() && clean_terminator && has_only_escaped_quotes(s);
+        Some(LocaEntry::new(key, value, Some(token), source_value_unambiguous))
     }
+}
+
+// The parser's last-quote recovery is permissive. Keep recovering these values, but don't
+// use a value with an ambiguous quote boundary as proof of a localization conflict.
+fn has_only_escaped_quotes(value: &str) -> bool {
+    let mut escaped = false;
+    for byte in value.bytes() {
+        if byte == b'"' && !escaped {
+            return false;
+        }
+        escaped = byte == b'\\' && !escaped;
+    }
+    !escaped
 }
 
 pub struct ValueParser<'a> {
@@ -436,6 +597,8 @@ pub struct ValueParser<'a> {
     content: Vec<&'a Token>,
     content_iters: Vec<Peekable<Chars<'a>>>,
     content_idx: usize,
+    quoted_expansions: Vec<bool>,
+    is_localization: bool,
     value: Vec<LocaValue>,
 }
 
@@ -450,8 +613,18 @@ impl<'a> ValueParser<'a> {
             content_iters: content.iter().map(|t| t.as_str().chars().peekable()).collect(),
             content,
             content_idx: 0,
+            quoted_expansions: Vec::new(),
+            is_localization: false,
             value: Vec::new(),
         }
+    }
+
+    pub(crate) fn new_localization(content: Vec<(&'a Token, bool)>) -> Self {
+        let (content, quoted_expansions) = content.into_iter().unzip();
+        let mut parser = Self::new(content);
+        parser.quoted_expansions = quoted_expansions;
+        parser.is_localization = true;
+        parser
     }
 
     fn maybe_advance_idx(&mut self) -> bool {
@@ -546,6 +719,12 @@ impl<'a> ValueParser<'a> {
                 let loc = self.loc;
                 let mut text = self.start_text();
                 while let Some(c) = self.peek() {
+                    if self.quoted_expansions.get(self.content_idx) == Some(&true) {
+                        // A |q expansion contributes literal text to the enclosing argument.
+                        text.add_char(c);
+                        self.next_char();
+                        continue;
+                    }
                     match c {
                         '\'' => break,
                         ']' => {
@@ -608,10 +787,26 @@ impl<'a> ValueParser<'a> {
             }
         }
         let name = text.take_to_token();
+        self.review_code_spacing(|c| c == '(');
         if self.peek() == Some('(') {
             Code { name, arguments: self.parse_code_args(), parenthesized: true }
         } else {
             Code { name, arguments: Vec::new(), parenthesized: false }
+        }
+    }
+
+    fn review_code_spacing(&mut self, is_delimiter: impl FnOnce(char) -> bool) {
+        if !Game::is_vic3() || !matches!(self.peek(), Some(' ' | '\t')) {
+            return;
+        }
+        let tail = &self.content[self.content_idx].as_str()[self.offset..];
+        if tail.trim_start_matches([' ', '\t']).chars().next().is_some_and(is_delimiter) {
+            tips(ErrorKey::Datafunctions)
+                .weak()
+                .msg("whitespace between data function tokens needs runtime verification")
+                .loc(self.loc)
+                .push();
+            self.skip_whitespace();
         }
     }
 
@@ -625,10 +820,12 @@ impl<'a> ValueParser<'a> {
                 self.next_char();
                 self.skip_whitespace();
             }
+            self.review_code_spacing(|c| c == '.');
             if self.peek() != Some('.') {
                 break;
             }
             self.next_char(); // Eat the '.'
+            self.review_code_spacing(is_code_char);
         }
         CodeChain { codes: v.into_boxed_slice() }
     }
@@ -839,25 +1036,35 @@ impl<'a> ValueParser<'a> {
                 self.parse_escape();
             } else {
                 let msg = "#markup should be followed by a space";
-                warn(ErrorKey::Markup).msg(msg).loc(self.loc).push();
-                self.value.push(LocaValue::Error);
+                if Game::is_vic3() {
+                    tips(ErrorKey::Markup).weak().msg(msg).loc(self.loc).push();
+                } else {
+                    warn(ErrorKey::Markup).msg(msg).loc(self.loc).push();
+                    self.value.push(LocaValue::Error);
+                }
             }
         }
     }
 
     fn parse_icon(&mut self) {
+        let opening = self.loc;
         self.next_char(); // eat the @
 
         let mut old_value = take(&mut self.value);
+        let mut terminated = false;
 
         while let Some(c) = self.peek() {
             if c == '[' {
                 self.parse_code();
+                if Game::is_vic3() && matches!(self.value.last(), Some(LocaValue::Error)) {
+                    break;
+                }
             } else if is_key_char(c) {
                 let key = self.get_key();
                 self.value.push(LocaValue::Text(key));
             } else if c == '!' {
                 self.next_char();
+                terminated = true;
                 break;
             } else if self.value.is_empty() {
                 self.unexpected_char("expected icon name", ErrorKey::Localization);
@@ -870,8 +1077,29 @@ impl<'a> ValueParser<'a> {
             }
         }
 
+        if Game::is_vic3() && !matches!(self.value.last(), Some(LocaValue::Error)) {
+            let error = if self.value.is_empty() {
+                Some("expected icon name after @")
+            } else if !terminated {
+                Some("expected ! after icon name")
+            } else {
+                None
+            };
+            if let Some(message) = error {
+                warn(ErrorKey::Localization).msg(message).loc(opening).push();
+                self.value.push(LocaValue::Error);
+            }
+        }
+
         if matches!(self.value.last(), Some(LocaValue::Error)) {
-            old_value.push(LocaValue::Error);
+            let recovered = if Game::is_vic3() {
+                // The diagnostic marks the invalid icon. Keep parsing from the boundary
+                // so a typo in another expression on this line is still visible.
+                LocaValue::Text(Token::new("@", opening))
+            } else {
+                LocaValue::Error
+            };
+            old_value.push(recovered);
             self.value = take(&mut old_value);
         } else if self.value.len() == 1 {
             if let Some(LocaValue::Text(icon)) = self.value.last() {
@@ -940,9 +1168,36 @@ impl<'a> ValueParser<'a> {
         self.value.push(LocaValue::Text(text.take_to_token()));
     }
 
+    fn parse_bracketed_prose(&mut self) -> bool {
+        let content = self.content[self.content_idx].as_str();
+        let tail = &content[self.offset + 1..];
+        let Some((inside, after)) = tail.split_once(']') else {
+            return false;
+        };
+        if !matches!(inside, "…" | "...")
+            && (inside.is_empty() || !inside.bytes().all(|c| c.is_ascii_digit()))
+        {
+            return false;
+        }
+        // Citations and editorial omissions appear within prose. Keep diagnosing
+        // isolated numeric or punctuation-only expressions in localization values.
+        if self.value.is_empty() && after.trim().is_empty() {
+            return false;
+        }
+        let token = Token::new(&content[self.offset..self.offset + inside.len() + 2], self.loc);
+        for _ in 0..inside.chars().count() + 2 {
+            self.next_char();
+        }
+        self.value.push(LocaValue::Text(token));
+        true
+    }
+
     pub fn parse_vec(mut self) -> Vec<LocaValue> {
         while let Some(c) = self.peek() {
             match c {
+                '[' if Game::is_vic3() && self.is_localization && self.parse_bracketed_prose() => {
+                    ()
+                }
                 '[' => self.parse_code(),
                 '#' => self.parse_markup(),
                 '@' if Game::is_hoi4() => self.parse_flag(),
@@ -965,6 +1220,12 @@ impl<'a> ValueParser<'a> {
 
 pub struct LocaReader {
     parser: LocaParser,
+}
+
+impl LocaReader {
+    pub(crate) fn language_confirmed(&self) -> bool {
+        self.parser.language_confirmed
+    }
 }
 
 impl Iterator for LocaReader {

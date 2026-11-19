@@ -66,7 +66,7 @@ pub fn validate_event(event: &Event, data: &Everything, sc: &mut ScopeContext) {
         vd.field_trigger("trigger", Tooltipped::No, sc);
         if let Some(token) = vd.field_value("video") {
             if token.as_str().contains('/') {
-                data.verify_exists(Item::File, token);
+                validate_event_video(token, data);
             } else {
                 data.verify_exists(Item::MediaAlias, token);
             }
@@ -116,13 +116,37 @@ pub fn validate_event(event: &Event, data: &Everything, sc: &mut ScopeContext) {
     });
     vd.field_validated_key_block("after", |key, block, data| {
         if !has_options {
-            let msg = "`after` effect will not run if there are no `option` blocks";
-            let info = "you can put it in `immediate` instead";
-            err(ErrorKey::Logic).msg(msg).info(info).loc(key).push();
+            let msg = "`after` has no `option` block before it";
+            let info = "Verify whether the event needs an after callback. For an effect that runs when the event starts, use immediate.";
+            err(ErrorKey::Logic).advisory_in_vic3().msg(msg).info(info).loc(key).push();
         }
         sc.wipe_temporaries();
         validate_effect(block, data, sc, tooltipped);
     });
+}
+
+fn validate_event_video(token: &Token, data: &Everything) {
+    if !data.item_exists(Item::File, token.as_str())
+        && let Some((key, video)) = data.iter_keys(Item::MediaAlias).find_map(|alias| {
+            let (key, block) = data.get_key_block(Item::MediaAlias, alias.as_str())?;
+            let video = block.get_field_value("video")?;
+            let fallback = block.get_field_value("fallback")?;
+            (video.is(token.as_str()) && data.item_exists(Item::MediaAlias, fallback.as_str()))
+                .then_some((key, video))
+        })
+    {
+        data.mark_used(Item::File, token.as_str());
+        report(ErrorKey::MissingFile, Item::File.severity())
+            .msg(format!("file {token} does not exist"))
+            .info(format!(
+                "Media alias {key} declares a fallback. Use the alias to opt into that fallback."
+            ))
+            .loc(token)
+            .loc_msg(video, "matching video in media alias")
+            .push();
+    } else {
+        data.verify_exists(Item::File, token);
+    }
 }
 
 fn validate_event_texture(token: &Token, data: &Everything) {

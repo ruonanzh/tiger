@@ -15,7 +15,7 @@ use crate::report::{ErrorKey, tips, warn};
 use crate::token::Token;
 use crate::util::SmartJoin;
 #[cfg(feature = "jomini")]
-use crate::validate::validate_numeric_range;
+use crate::validate::validate_numeric_interval;
 use crate::validator::Validator;
 
 #[derive(Clone, Debug, Default)]
@@ -39,7 +39,15 @@ impl Assets {
             if let Some(other) = assets.get(name.as_str())
                 && other.key.loc.kind >= name.loc.kind
             {
-                dup_error(name, &other.key, "asset");
+                if Game::is_vic3() {
+                    tips(ErrorKey::DuplicateItem)
+                        .msg(format!("duplicate {key} asset `{name}`"))
+                        .loc(name)
+                        .loc_msg(&other.key, "the other asset is here")
+                        .push();
+                } else {
+                    dup_error(name, &other.key, "asset");
+                }
             }
             assets.insert(name.as_str(), Asset::new(key.clone(), name.clone(), block.clone()));
             self.asset_names.replace(name.clone());
@@ -237,7 +245,12 @@ impl FileHandler<Option<Block>> for Assets {
                 {
                     self.identical_textures.push((other.clone(), entry.clone()));
                 } else {
-                    warn(ErrorKey::DuplicateItem)
+                    let diagnostic = if Game::is_vic3() {
+                        tips(ErrorKey::DuplicateItem)
+                    } else {
+                        warn(ErrorKey::DuplicateItem)
+                    };
+                    diagnostic
                         .msg("texture file is redefined by another file")
                         .loc(other)
                         .loc_msg(entry, "the other file is here")
@@ -403,16 +416,29 @@ impl Asset {
                 vd.multi_field_validated_block("portrait_accessory", |block, data| {
                     let mut vd = Validator::new(block, data);
                     vd.field_item("pattern_mask", Item::File);
-                    vd.field_item("variation", Item::AccessoryVariation);
+                    vd.field_validated_value("variation", |_, mut value| {
+                        if Game::is_vic3() {
+                            data.verify_exists_max_sev(
+                                Item::AccessoryVariation,
+                                value.value(),
+                                crate::Severity::Tips,
+                            );
+                            value.accept();
+                        } else {
+                            value.item(Item::AccessoryVariation);
+                        }
+                    });
                 });
                 vd.multi_field_validated_block("color_mask_remap_interval", |block, data| {
                     let mut vd = Validator::new(block, data);
                     vd.multi_field_validated_block("interval", |block, data| {
-                        validate_numeric_range(
+                        // Vic3's portrait shader computes start + value * (end - start),
+                        // so a descending interval reverses the blend.
+                        validate_numeric_interval(
                             block,
                             data,
-                            0.0,
-                            1.0,
+                            0.0..=1.0,
+                            !Game::is_vic3(),
                             Severity::Warning,
                             Confidence::Weak,
                         );

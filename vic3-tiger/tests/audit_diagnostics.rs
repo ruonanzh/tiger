@@ -88,6 +88,7 @@ fn reports_diagnostic_evidence_without_changing_affected_rules() {
             " dynamic_tooltip: \"#tooltippable;tooltip:[GetPlayer.GetTooltipTag],fixture_tooltip: text#!\"\n",
             " static_tooltip: \"#tooltippable;tooltip:fixture_tooltip: text#!\"\n",
             " fixture_tooltip: \"Example\"\n",
+            " malformed_tag: \"#color:{1.0,0.0,0.0 unclosed\"\n",
         ),
     );
     write(
@@ -143,6 +144,7 @@ fn reports_diagnostic_evidence_without_changing_affected_rules() {
     let fallback = find(ALIASES, "missing-file", "fallback video gfx/Existing.BK2 exists");
     assert_eq!(fallback.len(), 1);
     assert_eq!(fallback[0].0.confidence, Confidence::Weak);
+    assert_eq!(fallback[0].0.severity, Severity::Tips);
     assert_eq!(
         fallback[0].1.iter().map(|pointer| pointer.loc.line).collect::<Vec<_>>(),
         [1, 1, 2, 3]
@@ -156,6 +158,7 @@ fn reports_diagnostic_evidence_without_changing_affected_rules() {
     );
     let wrong_case = find(ALIASES, "missing-file", "gfx/existing.bk2");
     assert_eq!(wrong_case.len(), 1);
+    assert_eq!(wrong_case[0].0.severity, Severity::Warning);
     assert_eq!(wrong_case[0].0.info.as_deref(), Some("Existing path candidates: gfx/Existing.BK2"));
     for (line, path) in [(5, "gfx/absent.bk2"), (6, "gfx/cycle.bk2")] {
         let missing = find(ALIASES, "missing-file", path);
@@ -168,6 +171,7 @@ fn reports_diagnostic_evidence_without_changing_affected_rules() {
 
     let font = find(FONT, "missing-file", "fonts/NotoSerif/NotoSansKR-Medium.otf");
     assert_eq!(font.len(), 1);
+    assert_eq!(font[0].0.severity, Severity::Tips);
     assert_eq!(
         font[0].0.info.as_deref(),
         Some(
@@ -179,7 +183,7 @@ fn reports_diagnostic_evidence_without_changing_affected_rules() {
     }
     let dds = find("gfx/6x6.dds", "image-size", "FourCC DXT1, 6x6");
     assert_eq!(dds.len(), 1);
-    assert_eq!(dds[0].0.severity, Severity::Warning);
+    assert_eq!(dds[0].0.severity, Severity::Tips);
 
     let identical = find(DDS_ORIGINAL, "duplicate-item", "byte-identical DDS files");
     assert_eq!(identical.len(), 1);
@@ -191,11 +195,11 @@ fn reports_diagnostic_evidence_without_changing_affected_rules() {
     assert_eq!(pointers[2].loc.line, 3);
     let distinct = find(DDS_DISTINCT_ORIGINAL, "duplicate-item", "texture file is redefined");
     assert_eq!(distinct.len(), 1);
-    assert_eq!(distinct[0].0.severity, Severity::Warning);
+    assert_eq!(distinct[0].0.severity, Severity::Tips);
     assert_eq!(distinct[0].1.len(), 2);
     assert_eq!(distinct[0].1[1].loc.pathname(), Path::new(DDS_DISTINCT_COPY));
     for (line, confidence, severity, message) in [
-        (3, Confidence::Reasonable, Severity::Warning, "#markup should be followed by a space"),
+        (3, Confidence::Weak, Severity::Tips, "#markup should be followed by a space"),
         (
             4,
             Confidence::Weak,
@@ -203,6 +207,7 @@ fn reports_diagnostic_evidence_without_changing_affected_rules() {
             "dynamic tooltip target has a trailing colon: [GetPlayer.GetTooltipTag],fixture_tooltip",
         ),
         (5, Confidence::Reasonable, Severity::Warning, "expected `;`"),
+        (7, Confidence::Reasonable, Severity::Warning, "mismatched braces in markup"),
     ] {
         let findings = find(MARKUP, "markup", message);
         assert!(
@@ -217,15 +222,15 @@ fn reports_diagnostic_evidence_without_changing_affected_rules() {
     assert!(find(MARKUP, "markup", "").iter().all(|(_, pointers)| pointers[0].loc.line != 2));
 
     let flow = find(PM, "modifiers", "propagation from building needs verification");
-    assert_eq!(flow.len(), 2);
+    assert_eq!(flow.len(), 3);
+    let mut lines = Vec::new();
     for (report, pointers) in flow {
+        assert_eq!(report.severity, Severity::Tips);
         assert_eq!(report.confidence, Confidence::Weak);
-        assert!(matches!(pointers[0].loc.line, 2 | 3));
+        lines.push(pointers[0].loc.line);
     }
-    let definite = find(PM, "modifiers", "country_authority_add");
-    assert_eq!(definite.len(), 1);
-    assert_eq!(definite[0].0.confidence, Confidence::Reasonable);
-    assert_eq!(definite[0].1[0].loc.line, 4);
+    lines.sort_unstable();
+    assert_eq!(lines, [2, 3, 4]);
     assert!(find(PM, "modifiers", "building_throughput_add").is_empty());
     let definition = find(PM, "missing-item", "modifier type definition does not exist");
     assert_eq!(definition.len(), 2);

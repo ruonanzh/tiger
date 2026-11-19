@@ -147,7 +147,18 @@ impl Parser {
             if loc.column == 1 && !self.stack.is_empty() {
                 let msg = "possible bracket error";
                 let info = "This closing bracket is at the start of a line but does not end a top-level item.";
-                warn(ErrorKey::BracePlacement).msg(msg).info(info).loc(loc).push();
+                crate::report::report(
+                    ErrorKey::BracePlacement,
+                    if crate::Game::is_vic3() {
+                        crate::report::Severity::Tips
+                    } else {
+                        crate::report::Severity::Warning
+                    },
+                )
+                .msg(msg)
+                .info(info)
+                .loc(loc)
+                .push();
             }
         } else {
             err(ErrorKey::ParseError).msg(format!("Unexpected {bracket}")).loc(loc).push();

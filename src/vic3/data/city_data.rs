@@ -153,7 +153,10 @@ impl DbKind for CityCenterpiece {
                 let mut vd = Validator::new(block, data);
                 vd.set_max_severity(Severity::Warning);
                 vd.req_field_one_of(&["entity", "is_power_bloc_statue"]);
-                vd.field_item("entity", Item::Entity);
+                vd.field_validated_value("entity", |_, mut value| {
+                    value.set_max_severity(Severity::Tips);
+                    value.item(Item::Entity);
+                });
                 vd.field_bool("is_power_bloc_statue");
                 vd.field_item("building_type", Item::BuildingType);
                 vd.field_list_choice("compositions", &composition_names);
@@ -179,7 +182,9 @@ impl DbKind for CityGraphicsType {
         vd.field_integer("max_residence_points");
 
         for field in &["rich_building_meshes", "mid_building_meshes", "poor_building_meshes"] {
-            vd.field_list_items(field, Item::Pdxmesh);
+            vd.field_validated_list(field, |value, data| {
+                data.verify_exists_max_sev(Item::Pdxmesh, value, Severity::Tips);
+            });
         }
 
         for field in &[
@@ -202,7 +207,7 @@ impl DbKind for CityGraphicsType {
             vd.set_max_severity(Severity::Warning);
 
             for value in vd.values() {
-                data.verify_exists_max_sev(Item::Pdxmesh, value, Severity::Warning);
+                data.verify_exists_max_sev(Item::Pdxmesh, value, Severity::Tips);
             }
         });
     }

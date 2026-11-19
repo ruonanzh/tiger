@@ -54,7 +54,7 @@ impl DbKind for Terrain {
         vd.field_validated_block("materials", |block, data| {
             let mut vd = Validator::new(block, data);
             vd.unknown_value_fields(|key, value| {
-                data.verify_exists(Item::TerrainMaterial, key);
+                data.verify_exists_max_sev(Item::TerrainMaterial, key, crate::Severity::Tips);
                 value.expect_number();
             });
         });
@@ -65,7 +65,10 @@ impl DbKind for Terrain {
         vd.field("debug_color");
 
         // undocumented
-        vd.field_item("created_material", Item::TerrainMaterial);
+        vd.field_validated_value("created_material", |_, mut value| {
+            data.verify_exists_max_sev(Item::TerrainMaterial, value.value(), crate::Severity::Tips);
+            value.accept();
+        });
     }
 }
 

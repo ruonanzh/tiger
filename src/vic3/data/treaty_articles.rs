@@ -145,6 +145,15 @@ impl DbKind for TreatyArticle {
             }
         }
 
+        if !required_inputs.iter().any(|input| input.is("goods")) {
+            vd.field_validated_key("goods_valid_trigger", |key, _, _| {
+                err(ErrorKey::UnknownField)
+                    .msg("goods_valid_trigger requires goods in required_inputs")
+                    .loc(key)
+                    .push();
+            });
+        }
+
         vd.field_list_items("mutual_exclusions", Item::TreatyArticle);
         vd.field_list_items("unlocked_by_technologies", Item::Technology);
         vd.field_list_items("automatically_support", Item::DiplomaticPlay);
@@ -199,6 +208,13 @@ impl DbKind for TreatyArticle {
             });
             vd.field_trigger_builder("show_about_to_break_warning", Tooltipped::No, |key| {
                 build_article_trigger_sc(key, is_directed)
+            });
+            vd.unknown_fields(|key, _| {
+                err(ErrorKey::UnknownField)
+                    .msg(format!("unknown field `{key}` in requirement_to_maintain"))
+                    .info("Put maintenance conditions in the trigger block.")
+                    .loc(key)
+                    .push();
             });
         });
         for trigger in ["can_ratify", "can_propose"] {
@@ -269,9 +285,7 @@ impl DbKind for TreatyArticle {
                         if matches!(*script_value, "infamy_severity" | "infamy_min" | "infamy_max")
                         {
                             // These calculations receive the same inputs from the enclosing wargoal.
-                            let mut sc = ScopeContext::new(Scopes::Country, wargoal);
-                            sc.advise_on_missing_saved_scopes();
-                            sc
+                            ScopeContext::new(Scopes::Country, wargoal)
                         } else {
                             ScopeContext::new(Scopes::Country, key)
                         };

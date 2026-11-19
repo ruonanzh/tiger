@@ -94,7 +94,10 @@ impl DbKind for Principle {
 
         // undocumented
 
-        vd.field_script_value_no_breakdown_rooted("ai_weight", Scopes::Country);
+        // Shipped principles use both country and power-bloc operations directly here.
+        vd.field_script_value_no_breakdown_builder("ai_weight", |key| {
+            ScopeContext::new_inferred_root(Scopes::Country | Scopes::PowerBloc, key)
+        });
         vd.field_bool("allows_foreign_investment_in_lower_rank");
     }
 }

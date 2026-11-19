@@ -69,6 +69,14 @@ impl ReportBuilderStage1 {
         self
     }
 
+    /// Use an advisory severity for a rule whose runtime consequences are unverified in Vic3.
+    pub(crate) fn advisory_in_vic3(mut self) -> Self {
+        if crate::Game::is_vic3() {
+            self.1 = self.1.at_most(Severity::Tips);
+        }
+        self
+    }
+
     /// Sets the main report message.
     pub fn msg<S: Into<String>>(self, msg: S) -> ReportBuilderStage2 {
         ReportBuilderStage2 { stage1: self, msg: msg.into(), info: None, wiki: None }

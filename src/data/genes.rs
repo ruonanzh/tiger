@@ -2,11 +2,11 @@ use crate::block::{BV, Block};
 use crate::db::{Db, DbKind};
 use crate::everything::Everything;
 use crate::game::{Game, GameFlags};
-use crate::helpers::{TigerHashSet, dup_error};
-use crate::item::{Item, ItemLoader};
+use crate::helpers::{TigerHashSet, dup_overlay};
+use crate::item::{Item, ItemExt, ItemLoader};
 #[cfg(any(feature = "ck3", feature = "vic3", feature = "eu5"))]
-use crate::report::{Confidence, Severity};
-use crate::report::{ErrorKey, err, fatal, warn};
+use crate::report::Confidence;
+use crate::report::{ErrorKey, Severity, err, fatal, warn};
 use crate::token::Token;
 #[cfg(any(feature = "ck3", feature = "vic3", feature = "eu5"))]
 use crate::validate::validate_numeric_range;
@@ -84,7 +84,7 @@ impl Gene {
     pub fn verify_has_template(category: &str, template: &Token, data: &Everything) {
         if !data.item_has_property(Item::GeneCategory, category, template.as_str()) {
             let msg = format!("gene {category} does not have template {template}");
-            err(ErrorKey::MissingItem).msg(msg).loc(template).push();
+            err(ErrorKey::MissingItem).advisory_in_vic3().msg(msg).loc(template).push();
         }
     }
 }
@@ -183,7 +183,7 @@ impl MorphGene {
                 continue;
             }
             if let Some(other) = templates.get(key.as_str()) {
-                dup_error(key, other, "morph gene template");
+                dup_overlay(key, other, "morph gene template");
             }
             templates.insert(key.clone());
         }
@@ -279,7 +279,7 @@ impl DbKind for MorphGene {
         if let Some(other) = other.as_any().downcast_ref::<Self>() {
             for key in &other.templates {
                 if let Some(already) = self.templates.get(key.as_str()) {
-                    dup_error(key, already, "morph gene template");
+                    dup_overlay(key, already, "morph gene template");
                 }
                 self.templates.insert(key.clone());
             }
@@ -331,7 +331,7 @@ impl AccessoryGene {
                 continue;
             }
             if let Some(other) = templates.get(key.as_str()) {
-                dup_error(key, other, "accessory gene template");
+                dup_overlay(key, other, "accessory gene template");
             }
             templates.insert(key.clone());
         }
@@ -434,7 +434,7 @@ impl DbKind for AccessoryGene {
             if count % 2 == 0 {
                 if !token.is("") && !self.templates.contains(token) {
                     let msg = format!("Gene template {token} not found in category {call_key}");
-                    err(ErrorKey::MissingItem).msg(msg).loc(token).push();
+                    err(ErrorKey::MissingItem).advisory_in_vic3().msg(msg).loc(token).push();
                 }
             } else if let Some(i) = token.expect_integer()
                 && !(0..=256).contains(&i)
@@ -458,7 +458,7 @@ impl DbKind for AccessoryGene {
         if let Some(other) = other.as_any().downcast_ref::<Self>() {
             for key in &other.templates {
                 if let Some(already) = self.templates.get(key.as_str()) {
-                    dup_error(key, already, "morph gene template");
+                    dup_overlay(key, already, "morph gene template");
                 }
                 self.templates.insert(key.clone());
             }
@@ -479,13 +479,19 @@ fn validate_age(block: &Block, data: &Everything) {
     vd.req_field("curve");
 
     vd.field_value("mode"); // TODO
-    vd.field_validated_block("curve", validate_curve);
+    vd.field_validated_block("curve", |block, data| {
+        validate_curve_points(block, data, Game::is_vic3());
+    });
 }
 
 fn validate_curve(block: &Block, data: &Everything) {
+    validate_curve_points(block, data, false);
+}
+
+fn validate_curve_points(block: &Block, data: &Everything, allow_aging_sentinel: bool) {
     let mut vd = Validator::new(block, data);
     for block in vd.blocks() {
-        validate_curve_range(block, data);
+        validate_curve_range(block, data, allow_aging_sentinel);
     }
 }
 
@@ -496,15 +502,19 @@ fn validate_hsv_curve(block: &Block, data: &Everything) {
     }
 }
 
-fn validate_curve_range(block: &Block, data: &Everything) {
+fn validate_curve_range(block: &Block, data: &Everything, allow_aging_sentinel: bool) {
     let mut vd = Validator::new(block, data);
+    let values = vd.values();
+    // Shipped morph genes use (-1, -1) as a point in their aging curves.
+    let aging_sentinel = allow_aging_sentinel
+        && matches!(values.as_slice(), [x, y] if x.get_number() == Some(-1.0) && y.get_number() == Some(-1.0));
     let mut count = 0;
-    for token in vd.values() {
+    for token in values {
         if let Some(v) = token.expect_number() {
             count += 1;
             #[allow(clippy::collapsible_else_if)]
             if count == 1 {
-                if !(0.0..=1.0).contains(&v) {
+                if !(aging_sentinel || (0.0..=1.0).contains(&v)) {
                     let msg = "expected number from 0.0 to 1.0";
                     err(ErrorKey::Range).msg(msg).loc(token).push();
                 }
@@ -603,6 +613,11 @@ fn validate_morph_gene(block: &Block, data: &Everything) {
     }
 }
 
+fn verify_gene_accessory(data: &Everything, token: &Token) {
+    let severity = if Game::is_vic3() { Severity::Tips } else { Item::Accessory.severity() };
+    data.verify_exists_max_sev(Item::Accessory, token, severity);
+}
+
 fn validate_accessory_gene(block: &Block, data: &Everything) {
     let mut vd = Validator::new(block, data);
     vd.req_field("index");
@@ -625,12 +640,12 @@ fn validate_accessory_gene(block: &Block, data: &Everything) {
                     vd.integer_keys(|_weight, bv| match bv {
                         BV::Value(token) => {
                             if !token.is("empty") && !token.is("0") {
-                                data.verify_exists(Item::Accessory, token);
+                                verify_gene_accessory(data, token);
                             }
                         }
                         BV::Block(block) => {
                             for token in block.iter_values_warn() {
-                                data.verify_exists(Item::Accessory, token);
+                                verify_gene_accessory(data, token);
                             }
                         }
                     });

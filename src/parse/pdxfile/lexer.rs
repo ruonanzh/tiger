@@ -606,12 +606,19 @@ impl Iterator for Lexer<'_> {
                     if self.loc.column == 1 && self.brace_depth > 0 {
                         let msg = "possible brace error";
                         let info = "This closing brace is at the start of the line but does not close a top-level block.";
-                        warn(ErrorKey::BracePlacement)
-                            .weak()
-                            .msg(msg)
-                            .info(info)
-                            .loc(self.loc)
-                            .push();
+                        crate::report::report(
+                            ErrorKey::BracePlacement,
+                            if crate::Game::is_vic3() {
+                                crate::report::Severity::Tips
+                            } else {
+                                crate::report::Severity::Warning
+                            },
+                        )
+                        .weak()
+                        .msg(msg)
+                        .info(info)
+                        .loc(self.loc)
+                        .push();
                     }
                     let token = Token::from_static_str("}", self.loc);
                     self.consume();

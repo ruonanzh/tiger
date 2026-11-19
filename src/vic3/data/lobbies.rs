@@ -68,7 +68,13 @@ impl DbKind for PoliticalLobby {
         vd.field_choice("category", &["foreign_pro_country", "foreign_anti_country", "foreign"]);
         vd.field_item("texture", Item::File);
 
-        vd.field_trigger_builder("can_create", Tooltipped::No, sc_no_lobby);
+        vd.field_trigger_builder("can_create", Tooltipped::No, |token| {
+            // The bundled format guide says InterestGroup, while base-game can_create
+            // conditions directly use Country-only triggers and compare root as a Country.
+            let mut sc = ScopeContext::new_inferred_root(Scopes::InterestGroup, token);
+            sc.define_name("target_country", Scopes::Country, token);
+            sc
+        });
         vd.field_effect_builder("on_created", Tooltipped::No, sc_with_lobby);
 
         vd.multi_field_validated_block("requirement_to_maintain", |block, data| {

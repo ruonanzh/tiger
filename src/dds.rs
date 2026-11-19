@@ -137,7 +137,7 @@ impl DdsInfo {
                     self.width, self.height
                 );
                 let info = "Neither dimension is divisible by 4. Check for possible block alignment or scaling artifacts.";
-                warn(ErrorKey::ImageSize).msg(msg).info(info).loc(&self.entry).push();
+                tips(ErrorKey::ImageSize).msg(msg).info(info).loc(&self.entry).push();
                 return;
             }
             let msg = "compressed DDS must have width and height divisible by 4";

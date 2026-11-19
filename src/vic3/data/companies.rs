@@ -4,7 +4,8 @@ use crate::db::{Db, DbKind};
 use crate::everything::Everything;
 use crate::game::GameFlags;
 use crate::item::{Item, ItemLoader};
-use crate::modif::validate_modifs;
+use crate::modif::validate_modifs_with_flow;
+use crate::report::{ErrorKey, tips};
 use crate::scopes::Scopes;
 use crate::token::Token;
 use crate::tooltipped::Tooltipped;
@@ -80,7 +81,18 @@ impl DbKind for CompanyType {
 
         vd.multi_warn_field_validated_block("prosperity_modifier", |block, data| {
             let vd = Validator::new(block, data);
-            validate_modifs(block, data, ModifKinds::Country, vd);
+            validate_modifs_with_flow(block, data, ModifKinds::Country, vd, |from, target, token| {
+                // The bundled company_osterreichische_waffenfabriks_gesellschaft
+                // assigns a Character modifier in its prosperity block.
+                if target == ModifKinds::Character {
+                    tips(ErrorKey::Modifiers)
+                        .msg(format!("`{token}` is a Character modifier; company prosperity propagation needs verification"))
+                        .loc(token)
+                        .push();
+                } else {
+                    from.require_from(target, token, None, crate::Severity::Error);
+                }
+            });
         });
 
         vd.field_trigger_rooted("ai_will_do", Tooltipped::No, Scopes::Country);

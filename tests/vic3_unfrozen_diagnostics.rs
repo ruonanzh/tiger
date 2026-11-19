@@ -103,7 +103,16 @@ misspelled_total = { every_scope_state = { add = "state_export" } }"#,
         assert!(report.info.as_deref().unwrap_or_default().contains(info), "{report:?}");
     }
 
-    for (path, line) in [(TRIGGERS, 3), (TRIGGERS, 4), (EFFECTS, 3), (VALUES, 2), (VALUES, 3)] {
+    let non_calendar: Vec<_> =
+        reports.iter().filter(|(p, l, _)| p == TRIGGERS && *l == 3).collect();
+    assert_eq!(non_calendar.len(), 1, "{non_calendar:?}");
+    let report = &non_calendar[0].2;
+    assert_eq!(report.key.to_string(), "validation");
+    assert_eq!(report.severity, Severity::Warning);
+    assert_eq!(report.msg, "year >= 1839.2.30 uses an invalid calendar date");
+    assert!(report.info.as_deref().unwrap_or_default().contains("game_date"), "{report:?}");
+
+    for (path, line) in [(TRIGGERS, 4), (EFFECTS, 3), (VALUES, 2), (VALUES, 3)] {
         assert!(
             reports
                 .iter()
@@ -114,12 +123,12 @@ misspelled_total = { every_scope_state = { add = "state_export" } }"#,
     assert!(reports.iter().any(|(path, _, report)| {
         path == TRIGGERS && report.msg == "required field `type` missing"
     }));
-    for (path, line, suggestion) in [
-        (TRIGGERS, 5, Some("country_has_building_type_levels")),
-        (TRIGGERS, 6, None),
-        (TRIGGERS, 7, None),
-        (GUI, 2, Some("Use start_sound")),
-        (GUI, 3, None),
+    for (path, line, confidence, suggestion) in [
+        (TRIGGERS, 5, Confidence::Weak, Some("country_has_building_type_levels")),
+        (TRIGGERS, 6, Confidence::Weak, None),
+        (TRIGGERS, 7, Confidence::Weak, None),
+        (GUI, 2, Confidence::Strong, Some("Use start_sound")),
+        (GUI, 3, Confidence::Weak, None),
     ] {
         let report = &reports
             .iter()
@@ -127,7 +136,7 @@ misspelled_total = { every_scope_state = { add = "state_export" } }"#,
             .unwrap_or_else(|| panic!("{path}:{line} {reports:?}"))
             .2;
         assert_eq!(report.severity, Severity::Error);
-        assert_eq!(report.confidence, Confidence::Weak);
+        assert_eq!(report.confidence, confidence);
         if let Some(suggestion) = suggestion {
             assert!(report.info.as_deref().unwrap_or_default().contains(suggestion), "{report:?}");
         } else {

@@ -103,7 +103,12 @@ impl DbKind for CharacterTemplate {
         vd.field_item("hq", Item::StrategicRegion);
         vd.field_validated_value("commander_rank", |_, mut vd| {
             vd.maybe_is("default");
-            vd.item(Item::CommanderRank);
+            if vd.value().is_integer() {
+                data.verify_exists_max_sev(Item::CommanderRank, vd.value(), crate::Severity::Tips);
+                vd.accept();
+            } else {
+                vd.item(Item::CommanderRank);
+            }
         });
         vd.multi_field_validated_value("role", |_, mut vd| {
             vd.maybe_item(Item::CharacterArchetype);
@@ -156,7 +161,7 @@ impl DbKind for CharacterTemplate {
         });
 
         // undocumented
-        vd.field_target("company", &mut sc, Scopes::CompanyType);
+        vd.field_target("company", &mut sc, Scopes::Company.union(Scopes::CompanyType));
         vd.field_bool("is_for_ruler_selector");
     }
 }

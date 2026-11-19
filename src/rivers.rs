@@ -16,12 +16,16 @@ use crate::everything::Everything;
 use crate::fileset::{FileEntry, FileHandler};
 use crate::helpers::{TigerHashMap, TigerHashSet};
 use crate::parse::ParserMemory;
-use crate::report::{ErrorKey, err, warn, will_maybe_log};
+use crate::report::{ErrorKey, Severity, err, report, will_maybe_log};
 
 #[inline]
 fn river_image_path() -> &'static str {
     // TODO: for Imperator, CK3 and Vic3, instead of hardcoded rivers.png file name, get it from map_data/default.map
     if Game::is_hoi4() { "map/rivers.bmp" } else { "map_data/rivers.png" }
+}
+
+fn river_topology_severity() -> Severity {
+    if Game::is_vic3() { Severity::Tips } else { Severity::Warning }
 }
 
 /// The `rivers.png/bmp` has an indexed palette where the colors don't matter, only the index values
@@ -218,16 +222,19 @@ impl Rivers {
                         "({}, {}) river pixel connects two special pixels",
                         start.0, start.1
                     );
-                    warn(ErrorKey::Rivers).msg(msg).loc(entry).push();
+                    report(ErrorKey::Rivers, river_topology_severity()).msg(msg).loc(entry).push();
                 } else if special_neighbors.is_empty() {
                     let msg = format!("({}, {}) orphan river pixel", start.0, start.1);
-                    warn(ErrorKey::Rivers).msg(msg).loc(entry).push();
+                    report(ErrorKey::Rivers, river_topology_severity()).msg(msg).loc(entry).push();
                 } else {
                     let s = special_neighbors[0];
                     if specials[&s] {
                         let msg =
                             format!("({}, {}) pixel terminates multiple river segments", s.0, s.1);
-                        warn(ErrorKey::Rivers).msg(msg).loc(entry).push();
+                        report(ErrorKey::Rivers, river_topology_severity())
+                            .msg(msg)
+                            .loc(entry)
+                            .push();
                     } else {
                         specials.insert(s, true);
                     }
@@ -240,19 +247,22 @@ impl Rivers {
                         "({}, {}) - ({}, {}) orphan river segment",
                         start.0, start.1, end.0, end.1
                     );
-                    warn(ErrorKey::Rivers).msg(msg).loc(entry).push();
+                    report(ErrorKey::Rivers, river_topology_severity()).msg(msg).loc(entry).push();
                 } else if special_neighbors.len() > 1 {
                     let msg = format!(
                         "({}, {}) - ({}, {}) river segment has two terminators",
                         start.0, start.1, end.0, end.1
                     );
-                    warn(ErrorKey::Rivers).msg(msg).loc(entry).push();
+                    report(ErrorKey::Rivers, river_topology_severity()).msg(msg).loc(entry).push();
                 } else {
                     let s = special_neighbors[0];
                     if specials[&s] {
                         let msg =
                             format!("({}, {}) pixel terminates multiple river segments", s.0, s.1);
-                        warn(ErrorKey::Rivers).msg(msg).loc(entry).push();
+                        report(ErrorKey::Rivers, river_topology_severity())
+                            .msg(msg)
+                            .loc(entry)
+                            .push();
                     } else {
                         specials.insert(s, true);
                     }
@@ -301,7 +311,10 @@ impl Rivers {
                         } else {
                             let msg =
                                 format!("({x}, {y}) river source (green) not at source of a river");
-                            warn(ErrorKey::Rivers).msg(msg).loc(entry).push();
+                            report(ErrorKey::Rivers, river_topology_severity())
+                                .msg(msg)
+                                .loc(entry)
+                                .push();
                             bad_problem = true;
                         }
                     }
@@ -313,7 +326,10 @@ impl Rivers {
                             let msg = format!(
                                 "({x}, {y}) river tributary (red) not joining another river",
                             );
-                            warn(ErrorKey::Rivers).msg(msg).loc(entry).push();
+                            report(ErrorKey::Rivers, river_topology_severity())
+                                .msg(msg)
+                                .loc(entry)
+                                .push();
                             bad_problem = true;
                         }
                     }
@@ -325,7 +341,10 @@ impl Rivers {
                             let msg = format!(
                                 "({x}, {y}) river split (yellow) not splitting off from a river",
                             );
-                            warn(ErrorKey::Rivers).msg(msg).loc(entry).push();
+                            report(ErrorKey::Rivers, river_topology_severity())
+                                .msg(msg)
+                                .loc(entry)
+                                .push();
                             bad_problem = true;
                         }
                     }
@@ -343,7 +362,10 @@ impl Rivers {
                                         // though.
                                         if third_end == (x, y) {
                                             let msg = format!("({x}, {y}) river forms a loop");
-                                            warn(ErrorKey::Rivers).msg(msg).loc(entry).push();
+                                            report(ErrorKey::Rivers, river_topology_severity())
+                                                .msg(msg)
+                                                .loc(entry)
+                                                .push();
                                             bad_problem = true;
                                         } else {
                                             river_segments.insert(other_end, third_end);
@@ -368,7 +390,10 @@ impl Rivers {
                                 "({x}, {y}) river pixel has {} neighbors",
                                 river_neighbors.len()
                             );
-                            warn(ErrorKey::Rivers).msg(msg).loc(entry).push();
+                            report(ErrorKey::Rivers, river_topology_severity())
+                                .msg(msg)
+                                .loc(entry)
+                                .push();
                             bad_problem = true;
                         }
                     }

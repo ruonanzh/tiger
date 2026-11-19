@@ -236,9 +236,32 @@ fn get_numeric_var(memory: &CombinedMemory, name: &Token) -> f64 {
         }
     } else {
         let msg = format!("reader variable {name} not defined");
-        err(ErrorKey::ReaderDirectives).msg(msg).loc(name).push();
+        report_missing_reader_variable(name, msg);
         0.0
     }
+}
+
+/// Reader values used by editor utilities can be unresolved in the indexed files.
+pub(crate) fn is_editor_reader_reference(token: &Token) -> bool {
+    Game::is_vic3()
+        && token.loc.pathname().starts_with("gui/applicationutils")
+        && token.loc.pathname().extension().is_some_and(|ext| ext == "gui")
+        && token.strip_prefix("@").is_some_and(|name| {
+            name.as_str().starts_with(|c: char| c.is_ascii_alphabetic())
+                && name.as_str().chars().all(CharExt::is_local_value_char)
+        })
+}
+
+fn report_missing_reader_variable(token: &Token, msg: String) {
+    let diagnostic = err(ErrorKey::ReaderDirectives);
+    let diagnostic = if is_editor_reader_reference(token) {
+        diagnostic.advisory_in_vic3().weak()
+    } else if token.loc.pathname().extension().is_some_and(|ext| ext == "gui") {
+        diagnostic.advisory_in_vic3()
+    } else {
+        diagnostic
+    };
+    diagnostic.msg(msg).loc(token).push();
 }
 
 /// A convenience trait to add some methods to [`char`]

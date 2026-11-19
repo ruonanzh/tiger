@@ -10,7 +10,7 @@ use crate::everything::Everything;
 use crate::fileset::{FileEntry, FileHandler};
 use crate::game::Game;
 use crate::gui::{BuiltinWidget, GuiBlock, GuiBlockFrom};
-use crate::helpers::{TigerHashMap, TigerHashSet, dup_error};
+use crate::helpers::{TigerHashMap, TigerHashSet, dup_error, dup_overlay};
 use crate::item::Item;
 use crate::lowercase::Lowercase;
 use crate::parse::ParserMemory;
@@ -38,6 +38,19 @@ pub struct Gui {
 impl Gui {
     #[allow(clippy::collapsible_else_if)] // clippy is suggesting bad style here
     fn load_widget(&mut self, filename: PathBuf, key: Token, mut block: Block) {
+        let key = if Game::is_vic3()
+            && let Some((prefix, name)) = key.split_once(':')
+            && prefix.is("REPLACE_OR_CREATE")
+            && (name.is("texticon") || name.is("textformatting"))
+        {
+            crate::report::tips(ErrorKey::Prefixes)
+                .msg("GUI support for this definition prefix needs verification")
+                .loc(prefix)
+                .push();
+            name
+        } else {
+            key
+        };
         if key.is("texticon") {
             if let Some(icon) = block.get_field_value("icon") {
                 self.load_texticon(icon.clone(), block);
@@ -141,7 +154,7 @@ impl Gui {
         // With gui types the earlier one takes precedence
         if let Some(other) = self.types.get(&key_lc) {
             if other.key.loc.kind <= key.loc.kind {
-                dup_error(&other.key, &key, "gui type");
+                dup_overlay(&other.key, &key, "gui type");
             }
             return;
         }
@@ -184,14 +197,14 @@ impl Gui {
                 && other.key.loc.kind >= key.loc.kind
             {
                 let id = format!("textformat for {cbm}");
-                dup_error(&key, &other.key, &id);
+                dup_overlay(&key, &other.key, &id);
             }
             self.textformats_colorblind.insert(index, TextFormat::new(key, block, Some(cbm)));
         } else {
             if let Some(other) = self.textformats.get(key.as_str())
                 && other.key.loc.kind >= key.loc.kind
             {
-                dup_error(&key, &other.key, "textformat");
+                dup_overlay(&key, &other.key, "textformat");
             }
             self.textformats.insert(key.as_str(), TextFormat::new(key, block, None));
         }

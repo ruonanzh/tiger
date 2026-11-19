@@ -42,6 +42,20 @@ pub fn dup_error(key: &Token, other: &Token, id: &str) {
         .push();
 }
 
+/// Report a duplicate in a resource namespace whose cross-file ordering is unverified in Vic3.
+pub fn dup_overlay(key: &Token, other: &Token, id: &str) {
+    if Game::is_vic3() && key.loc.fullpath() != other.loc.fullpath() {
+        tips(ErrorKey::DuplicateItem)
+            .msg(format!("{id} is redefined by another {id}"))
+            .info("Verify which definition takes effect in the active resource load set.")
+            .loc(other)
+            .loc_msg(key, format!("the other {id} is here"))
+            .push();
+    } else {
+        dup_error(key, other, id);
+    }
+}
+
 /// Warns about an exact redefinition of a database item
 pub fn exact_dup_error(key: &Token, other: &Token, id: &str) {
     warn(ErrorKey::ExactDuplicateItem)
@@ -75,6 +89,7 @@ pub fn dup_assign_error(key: &Token, other: &Token, allow_inject: AllowInject) {
     other.loc.link_idx = None;
 
     warn(ErrorKey::DuplicateField)
+        .advisory_in_vic3()
         .msg(format!("`{other}` is redefined in a following line").as_str())
         .loc(other.loc)
         .loc_msg(key.loc, "the other one is here")
@@ -293,7 +308,12 @@ where
         } else {
             if let Some(other) = get_other(key.as_str()) {
                 let msg = format!("must have prefix such as `REPLACE:` to replace {itype}");
-                err(ErrorKey::Prefixes).msg(msg).loc(key).loc_msg(other, "original here").push();
+                err(ErrorKey::Prefixes)
+                    .advisory_in_vic3()
+                    .msg(msg)
+                    .loc(key)
+                    .loc_msg(other, "original here")
+                    .push();
             } else {
                 return Some(key);
             }
@@ -369,7 +389,12 @@ where
         } else {
             if let Some(other) = get_other(key.as_str()) {
                 let msg = format!("must have prefix such as `REPLACE:` to replace {itype}");
-                err(ErrorKey::Prefixes).msg(msg).loc(key).loc_msg(other, "original here").push();
+                err(ErrorKey::Prefixes)
+                    .advisory_in_vic3()
+                    .msg(msg)
+                    .loc(key)
+                    .loc_msg(other, "original here")
+                    .push();
             } else {
                 return PrefixShould::Insert(key.clone());
             }

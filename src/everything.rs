@@ -61,6 +61,8 @@ use crate::eu5::tables::misc::*;
 use crate::fileset::{FileEntry, FileKind, FileStage, Fileset};
 use crate::game::Game;
 #[cfg(any(feature = "ck3", feature = "vic3"))]
+#[cfg(feature = "vic3")]
+use crate::helpers::TigerHashMap;
 use crate::helpers::TigerHashSet;
 #[cfg(feature = "hoi4")]
 use crate::hoi4::data::{
@@ -139,6 +141,8 @@ pub struct Everything {
 
     #[cfg(feature = "vic3")]
     vic3_sound_paths: TigerHashSet<String>,
+    #[cfg(feature = "vic3")]
+    pub(crate) external_triggers: TigerHashMap<String, PathBuf>,
 
     /// Tracks specifically the .dds files, and their formats and sizes.
     pub(crate) dds: DdsFiles,
@@ -528,11 +532,25 @@ impl Everything {
             TigerHashSet::default()
         };
 
+        #[cfg(feature = "vic3")]
+        let external_triggers = workshop_dir.filter(|_| Game::is_vic3()).map_or_else(
+            TigerHashMap::default,
+            |workshop| {
+                crate::vic3::data::external_triggers::index(
+                    workshop,
+                    mod_root,
+                    &fileset.loaded_mods,
+                )
+            },
+        );
+
         Ok(Everything {
             parser: ParserMemory::default(),
             fileset,
             #[cfg(feature = "vic3")]
             vic3_sound_paths,
+            #[cfg(feature = "vic3")]
+            external_triggers,
             dds: DdsFiles::default(),
             config,
             #[cfg(any(feature = "ck3", feature = "vic3"))]
@@ -1256,8 +1274,19 @@ impl Everything {
                     } else {
                         format!("{itype} {key} not defined in {path}")
                     };
+                    let confidence = itype.confidence();
+                    #[cfg(feature = "vic3")]
+                    let confidence = if Game::is_vic3()
+                        && itype == Item::Sound
+                        && (key.starts_with("event:/") || key.starts_with("snapshot:/"))
+                        && !self.vic3_sound_paths.is_empty()
+                    {
+                        crate::Confidence::Reasonable
+                    } else {
+                        confidence
+                    };
                     report(ErrorKey::MissingItem, itype.severity().at_most(max_sev))
-                        .conf(itype.confidence())
+                        .conf(confidence)
                         .msg(msg)
                         .loc(token)
                         .push();

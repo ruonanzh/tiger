@@ -1,4 +1,4 @@
-use crate::block::Block;
+use crate::block::{Block, Field};
 use crate::db::{Db, DbKind};
 use crate::everything::Everything;
 use crate::game::GameFlags;
@@ -43,7 +43,20 @@ impl DbKind for ModifierTypeDefinition {
 
         verify_modif_exists(key, data, ModifKinds::all(), Severity::Untidy);
 
-        vd.field_integer("decimals");
+        vd.field_value("decimals");
+        // modifier_types.md specifies the number of displayed decimal places.
+        // Examine every occurrence even when a later value would replace an earlier one.
+        for Field(field, _, value) in block.iter_fields() {
+            if field.is("decimals")
+                && let Some(token) = value.get_value()
+                && !token.is_integer()
+            {
+                report(ErrorKey::Validation, Severity::Error)
+                    .msg("expected integer")
+                    .loc(token)
+                    .push();
+            }
+        }
         vd.field_choice("color", &["neutral", "good", "bad"]);
         vd.field_bool("percent");
         vd.field_bool("boolean");

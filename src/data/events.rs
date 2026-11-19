@@ -107,10 +107,12 @@ impl Events {
     }
 
     #[cfg(feature = "vic3")]
-    pub(crate) fn declared_country_scope<'a>(&'a self, id: &'a str) -> Option<&'a Token> {
-        self.get_event(id)
-            .filter(|event| event.expects_from_token.is("country_event"))
-            .map(|event| &event.expects_from_token)
+    pub(crate) fn declared_scope<'a>(&'a self, id: &'a str) -> Option<(Scopes, &'a Token)> {
+        self.get_event(id).and_then(|event| {
+            let event_type = &event.expects_from_token;
+            matches!(event_type.as_str(), "country_event" | "character_event" | "state_event")
+                .then_some((event.expects_scope, event_type))
+        })
     }
 
     pub fn check_scope(&self, token: &Token, sc: &mut ScopeContext, data: &Everything) {

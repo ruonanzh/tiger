@@ -5,6 +5,7 @@ use crate::everything::Everything;
 use crate::game::GameFlags;
 use crate::item::{Item, ItemLoader};
 use crate::modif::{ModifKinds as _, validate_modifs};
+use crate::report::Severity;
 use crate::token::Token;
 use crate::validator::Validator;
 use crate::vic3::modif::ModifKinds;
@@ -37,7 +38,10 @@ impl DbKind for Modifier {
         {
             data.verify_exists(Item::Localization, key);
         }
-        vd.field_item("icon", Item::File);
+        vd.field_validated_value("icon", |_, mut value| {
+            value.set_max_severity(Severity::Tips);
+            value.item(Item::File);
+        });
 
         validate_modifs(block, data, ModifKinds::all(), vd);
     }

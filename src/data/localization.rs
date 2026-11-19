@@ -161,6 +161,8 @@ pub struct LocaEntry {
     /// The original unparsed value, with enclosing `"` stripped.
     /// This is used for macro replacement.
     orig: Option<Token>,
+    /// Whether the raw value has an unambiguous quoted boundary.
+    source_value_unambiguous: bool,
     /// Whether this entry has been "used" (looked up) by anything in the mod
     used: AtomicBool,
     /// Whether this entry has been validated with a `ScopeContext`
@@ -188,14 +190,42 @@ impl Ord for LocaEntry {
 }
 
 impl LocaEntry {
-    pub fn new(key: Token, value: LocaValue, orig: Option<Token>) -> Self {
-        Self { key, value, orig, used: AtomicBool::new(false), validated: AtomicBool::new(false) }
+    pub fn new(
+        key: Token,
+        value: LocaValue,
+        orig: Option<Token>,
+        source_value_unambiguous: bool,
+    ) -> Self {
+        Self {
+            key,
+            value,
+            orig,
+            source_value_unambiguous,
+            used: AtomicBool::new(false),
+            validated: AtomicBool::new(false),
+        }
+    }
+
+    fn report_vic3_duplicate(
+        &self,
+        language: Language,
+        severity: Severity,
+        other_key: &Token,
+        other_value: Option<&Token>,
+    ) {
+        let current_value = self.orig.as_ref().map(Token::as_str);
+        let other_value = other_value.map(Token::as_str);
+        report(ErrorKey::DuplicateItem, severity)
+            .msg(format!("duplicate {language} localization key `{}`", self.key))
+            .loc_msg(&self.key, format!("value: {current_value:?}"))
+            .loc_msg(other_key, format!("other value: {other_value:?}"))
+            .push();
     }
 
     // returns false to abort expansion in case of an error
     fn expand_macros<'a>(
         &'a self,
-        vec: &mut Vec<Token>,
+        vec: &mut Vec<(Token, bool)>,
         from: &'a TigerHashMap<&'a str, LocaEntry>,
         count: &mut usize,
         sc: &mut ScopeContext,
@@ -211,8 +241,9 @@ impl LocaEntry {
         if let LocaValue::Macro(v) = &self.value {
             for macrovalue in v {
                 match macrovalue {
-                    MacroValue::Text(token) => vec.push(token.clone().linked(link)),
-                    MacroValue::Keyword(keyword) => {
+                    MacroValue::Text(token) => vec.push((token.clone().linked(link), false)),
+                    MacroValue::Keyword(keyword, quoted) => {
+                        let start = vec.len();
                         if let Some(entry) = from.get(keyword.as_str()) {
                             entry.used.store(true, Relaxed);
                             entry.validated.store(true, Relaxed);
@@ -226,32 +257,53 @@ impl LocaEntry {
                             ) {
                                 return false;
                             }
+                            if *quoted {
+                                for (_, quoted) in &mut vec[start..] {
+                                    *quoted = true;
+                                }
+                            }
                         } else if is_builtin_macro(keyword) {
                             // we can't know what value it really has, so replace it with itself to
                             // at least get comprehensible error messages
-                            vec.push(keyword.clone().linked(link));
+                            vec.push((keyword.clone().linked(link), *quoted));
                         } else if let Some(scopes) = sc.is_name_defined(keyword.as_str(), data) {
                             if scopes.contains(Scopes::Value) {
                                 // same as above... we can't know what value it really has
-                                vec.push(keyword.clone().linked(link));
+                                vec.push((keyword.clone().linked(link), *quoted));
                             } else {
                                 let msg = &format!(
-                                    "The substitution parameter ${keyword}$ is not defined anywhere as a key."
+                                    "The substitution parameter ${keyword}$ was not found as a key in the indexed language."
                                 );
-                                warn(ErrorKey::Localization).msg(msg).loc(keyword).push();
+                                report(
+                                    ErrorKey::Localization,
+                                    if Game::is_vic3() {
+                                        Severity::Tips
+                                    } else {
+                                        Severity::Warning
+                                    },
+                                )
+                                .msg(msg)
+                                .loc(keyword)
+                                .push();
                             }
                         } else {
                             let msg = &format!(
-                                "The substitution parameter ${keyword}$ is not defined anywhere as a key."
+                                "The substitution parameter ${keyword}$ was not found as a key in the indexed language."
                             );
-                            warn(ErrorKey::Localization).msg(msg).loc(keyword).push();
+                            report(
+                                ErrorKey::Localization,
+                                if Game::is_vic3() { Severity::Tips } else { Severity::Warning },
+                            )
+                            .msg(msg)
+                            .loc(keyword)
+                            .push();
                         }
                     }
                 }
             }
             true
         } else if let Some(orig) = &self.orig {
-            vec.push(orig.clone().linked(link));
+            vec.push((orig.clone().linked(link), false));
             true
         } else {
             false
@@ -291,8 +343,8 @@ pub enum LocaValue {
 #[derive(Clone, Debug)]
 pub enum MacroValue {
     Text(Token),
-    // The formatting is not stored in the enum because it's not validated.
-    Keyword(Token),
+    // Track |q because it protects delimiters inside a literal argument.
+    Keyword(Token, bool),
 }
 
 fn get_file_lang(filename: &OsStr) -> Option<Language> {
@@ -303,6 +355,10 @@ fn get_file_lang(filename: &OsStr) -> Option<Language> {
     // never match the suffix anyway.
     let filename = filename.to_string_lossy();
     L_LANGS.iter().position(|l| filename.contains(l.as_ref())).map(Language::from_idx)
+}
+
+fn localization_coverage_severity() -> Severity {
+    if Game::is_vic3() { Severity::Tips } else { Item::Localization.severity() }
 }
 
 impl Localization {
@@ -350,11 +406,14 @@ impl Localization {
         let langs_missing = self.mark_used_return_missing(key);
         if !langs_missing.is_empty() {
             let msg = format!("missing {} localization key {key}", stringify_list(&langs_missing));
-            // TODO: get confidence level from caller
-            report(ErrorKey::MissingLocalization, Item::Localization.severity().at_most(max_sev))
-                .msg(msg)
-                .loc(token)
-                .push();
+            // A missing key only describes the languages indexed by Tiger in Vic3.
+            report(
+                ErrorKey::MissingLocalization,
+                localization_coverage_severity().at_most(max_sev),
+            )
+            .msg(msg)
+            .loc(token)
+            .push();
         }
     }
 
@@ -414,8 +473,8 @@ impl Localization {
         if let Some(lang) = lang {
             if !self.mark_used_lang_return_exists(key, lang) {
                 let msg = format!("missing {lang} localization key {key}");
-                // TODO: get confidence level from caller
-                warn(ErrorKey::MissingLocalization).msg(msg).loc(token).push();
+                let severity = if Game::is_vic3() { Severity::Tips } else { Severity::Warning };
+                report(ErrorKey::MissingLocalization, severity).msg(msg).loc(token).push();
             }
         } else {
             self.verify_exists_implied(key, token, Severity::Warning);
@@ -469,7 +528,7 @@ impl Localization {
         // This inconsistency is worth warning about.
         else if !langs_missing.is_empty() {
             let msg = format!("missing {} localization key {key}", stringify_list(&langs_missing));
-            report(ErrorKey::MissingLocalization, Item::Localization.severity())
+            report(ErrorKey::MissingLocalization, localization_coverage_severity())
                 .msg(msg)
                 .loc(token)
                 .push();
@@ -565,7 +624,8 @@ impl Localization {
             }
             LocaValue::Icon(token) => {
                 if !is_builtin_macro(token) && !token.is("ICONKEY_icon") && !token.is("KEY_icon") {
-                    data.verify_exists(Item::TextIcon, token);
+                    let severity = if Game::is_vic3() { Severity::Tips } else { Severity::Warning };
+                    data.verify_exists_max_sev(Item::TextIcon, token, severity);
                 }
             }
             #[allow(unused_variables)]
@@ -628,8 +688,9 @@ impl Localization {
             let mut count = 0;
             if entry.expand_macros(&mut new_line, from, &mut count, sc, None, data) {
                 // re-parse after macro expansion
-                let new_line_as_ref = new_line.iter().collect();
-                let value = ValueParser::new(new_line_as_ref).parse();
+                let new_line_as_ref =
+                    new_line.iter().map(|(token, quoted)| (token, *quoted)).collect();
+                let value = ValueParser::new_localization(new_line_as_ref).parse();
                 Self::check_loca_code(&value, data, sc, lang);
             }
         } else {
@@ -746,7 +807,7 @@ impl Localization {
     }
 }
 
-impl FileHandler<(Language, Vec<LocaEntry>)> for Localization {
+impl FileHandler<(Language, bool, Vec<LocaEntry>)> for Localization {
     fn config(&mut self, config: &Block) {
         if let Some(block) = config.get_field_block("languages") {
             // By default, self.check_langs is all true.
@@ -781,7 +842,7 @@ impl FileHandler<(Language, Vec<LocaEntry>)> for Localization {
         &self,
         entry: &FileEntry,
         _parser: &ParserMemory,
-    ) -> Option<(Language, Vec<LocaEntry>)> {
+    ) -> Option<(Language, bool, Vec<LocaEntry>)> {
         if !entry.filename().to_string_lossy().ends_with(".yml") {
             return None;
         }
@@ -811,7 +872,9 @@ impl FileHandler<(Language, Vec<LocaEntry>)> for Localization {
             }
             match read_to_string(entry.fullpath()) {
                 Ok(content) => {
-                    return Some((filelang, parse_loca(entry, content, filelang).collect()));
+                    let mut reader = parse_loca(entry, content, filelang);
+                    let entries = reader.by_ref().collect();
+                    return Some((filelang, reader.language_confirmed(), entries));
                 }
                 Err(e) => {
                     let msg = "could not read file";
@@ -831,8 +894,8 @@ impl FileHandler<(Language, Vec<LocaEntry>)> for Localization {
         None
     }
 
-    fn handle_file(&mut self, entry: &FileEntry, loaded: (Language, Vec<LocaEntry>)) {
-        let (filelang, vec) = loaded;
+    fn handle_file(&mut self, entry: &FileEntry, loaded: (Language, bool, Vec<LocaEntry>)) {
+        let (filelang, language_confirmed, vec) = loaded;
         let hash = &mut self.locas[filelang];
         if hash.is_empty() {
             // empirically ~290k for each lang of ck3
@@ -843,15 +906,72 @@ impl FileHandler<(Language, Vec<LocaEntry>)> for Localization {
             self.mod_langs.set(filelang.to_idx(), true);
         }
 
+        let vic3 = Game::is_vic3();
+        let replaces = is_replace_path(entry.path());
+        let mut first_in_file = TigerHashMap::<_, (Token, Option<Token>, bool)>::default();
         for loca in vec {
+            let locally_repeated = if vic3 {
+                match first_in_file.entry(loca.key.as_str()) {
+                    Entry::Occupied(mut prior) => {
+                        let (prior_key, prior_value, prior_unambiguous) = prior.get();
+                        let divergent_values = matches!(
+                            (&loca.orig, prior_value),
+                            (Some(current), Some(previous)) if current != previous
+                        );
+                        let severity = if language_confirmed
+                            && *prior_unambiguous
+                            && loca.source_value_unambiguous
+                            && divergent_values
+                        {
+                            Severity::Warning
+                        } else {
+                            Severity::Tips
+                        };
+                        loca.report_vic3_duplicate(
+                            filelang,
+                            severity,
+                            prior_key,
+                            prior_value.as_ref(),
+                        );
+                        if (!*prior_unambiguous && loca.source_value_unambiguous)
+                            || (prior_value.is_none() && loca.orig.is_some())
+                        {
+                            prior.insert((
+                                loca.key.clone(),
+                                loca.orig.clone(),
+                                loca.source_value_unambiguous,
+                            ));
+                        }
+                        true
+                    }
+                    Entry::Vacant(first) => {
+                        first.insert((
+                            loca.key.clone(),
+                            loca.orig.clone(),
+                            loca.source_value_unambiguous,
+                        ));
+                        false
+                    }
+                }
+            } else {
+                false
+            };
             match hash.entry(loca.key.as_str()) {
                 Entry::Occupied(mut occupied_entry) => {
                     let other = occupied_entry.get();
-                    // other.key and loca.key are in the other order than usual here,
-                    // because in loca the older definition overrides the later one.
-                    if is_replace_path(entry.path()) {
+                    // Report one cross-file pair; subsequent entries already have a local pair.
+                    if vic3 && !locally_repeated && other.key.loc.kind == entry.kind() {
+                        loca.report_vic3_duplicate(
+                            filelang,
+                            Severity::Tips,
+                            &other.key,
+                            other.orig.as_ref(),
+                        );
+                    }
+                    if replaces {
                         occupied_entry.insert(loca);
-                    } else if other.key.loc.kind == entry.kind() && other.orig != loca.orig {
+                    } else if !vic3 && other.key.loc.kind == entry.kind() && other.orig != loca.orig
+                    {
                         dup_error(&other.key, &loca.key, "localization");
                     }
                 }
@@ -959,8 +1079,8 @@ mod tests {
         for &(k1, k2) in &pairs {
             let t1 = Token::from_static_str(k1, dummy_loc);
             let t2 = Token::from_static_str(k2, dummy_loc);
-            let e1 = LocaEntry::new(t1.clone(), LocaValue::Text(t1.clone()), None);
-            let e2 = LocaEntry::new(t2.clone(), LocaValue::Text(t2.clone()), None);
+            let e1 = LocaEntry::new(t1.clone(), LocaValue::Text(t1.clone()), None, false);
+            let e2 = LocaEntry::new(t2.clone(), LocaValue::Text(t2.clone()), None, false);
             loc.locas[lang].insert(k1, e1);
             loc.locas[lang].insert(k2, e2);
         }

@@ -29,7 +29,7 @@ use crate::item::Item;
 use crate::report::Severity;
 #[cfg(feature = "jomini")]
 use crate::report::err;
-use crate::report::{ErrorKey, warn};
+use crate::report::{ErrorKey, tips, warn};
 use crate::scopes::Scopes;
 use crate::token::Token;
 
@@ -288,8 +288,10 @@ pub fn validate_datatypes(
                 args = xargs;
                 rtype = xrtype;
             }
-        } else if !is_first && (!is_last || expect_promote) {
-            match lookup_p {
+        } else if !is_first {
+            let is_promote = !is_last || expect_promote;
+            let lookup = if is_promote { lookup_p } else { lookup_f };
+            match lookup {
                 LookupResult::Found(xargs, xrtype) => {
                     found = true;
                     args = xargs;
@@ -297,22 +299,30 @@ pub fn validate_datatypes(
                 }
                 LookupResult::WrongType => {
                     let msg = format!("{} cannot follow a {curtype} promote", code.name);
-                    warn(ErrorKey::Datafunctions).msg(msg).loc(&code.name).push();
-                    return Datatype::Unknown;
-                }
-                LookupResult::NotFound => (),
-            }
-        } else if !is_first && is_last && !expect_promote {
-            match lookup_f {
-                LookupResult::Found(xargs, xrtype) => {
-                    found = true;
-                    args = xargs;
-                    rtype = xrtype;
-                }
-                LookupResult::WrongType => {
-                    let msg = format!("{} cannot follow a {curtype} promote", code.name);
-                    warn(ErrorKey::Datafunctions).msg(msg).loc(&code.name).push();
-                    return Datatype::Unknown;
+                    if Game::is_vic3() && matches!(curtype, Datatype::Scope | Datatype::TopScope) {
+                        let lookup = if is_promote { lookup_promote } else { lookup_function };
+                        if let LookupResult::Found(xargs, xrtype) =
+                            lookup(code.name.as_str(), Datatype::Unknown)
+                        {
+                            found = true;
+                            args = xargs;
+                            rtype = xrtype;
+                        }
+                        // A dynamic scope payload may provide the receiver. Continue to validate
+                        // signatures shared by all known overloads and subsequent chain elements.
+                        tips(ErrorKey::Datafunctions)
+                            .weak()
+                            .msg(format!(
+                                "receiver for {} is unresolved after {curtype}",
+                                code.name
+                            ))
+                            .info("Check the receiver type supplied at runtime")
+                            .loc(&code.name)
+                            .push();
+                    } else {
+                        warn(ErrorKey::Datafunctions).msg(msg).loc(&code.name).push();
+                        return Datatype::Unknown;
+                    }
                 }
                 LookupResult::NotFound => (),
             }
@@ -573,8 +583,10 @@ pub fn validate_datatypes(
                 warn(ErrorKey::Datafunctions).msg(msg).info(info).loc(&code.name).push();
             } else if Game::is_vic3()
                 && is_first
-                && code.arguments.is_empty()
+                && !code.parenthesized
+                && code.name.loc.kind == crate::fileset::FileKind::Clausewitz
                 && code.name.loc.pathname().starts_with("gui/gui_editor")
+                && (!is_last || (expect_promote && code.name.is("GuiEditorProperty")))
                 && matches!(
                     code.name.as_str(),
                     "GuiEditor"
@@ -588,10 +600,24 @@ pub fn validate_datatypes(
             {
                 // The bundled Clausewitz editor uses these datacontexts, which are
                 // present in other Clausewitz games' dumps but absent from Vic3's.
-                warn(ErrorKey::Datafunctions)
+                tips(ErrorKey::Datafunctions)
                     .weak()
                     .msg(msg)
-                    .info("Bundled Clausewitz editor datacontext is absent from the Vic3 data type dump")
+                    .info("The bundled Clausewitz editor uses this runtime datacontext, absent from the Vic3 data type dump")
+                    .loc(&code.name)
+                    .push();
+            } else if Game::is_vic3()
+                && is_first
+                && !code.parenthesized
+                && !is_last
+                && code.name.is("PopListPopEntry")
+            {
+                // Shipped localization still references this legacy context; its runtime
+                // availability is uncertain because it is absent from the data type dump.
+                tips(ErrorKey::Datafunctions)
+                    .weak()
+                    .msg(msg)
+                    .info("Shipped localization references this context, which is absent from the data type dump")
                     .loc(&code.name)
                     .push();
             } else {
@@ -737,6 +763,23 @@ pub fn validate_datatypes(
                 {
                     continue;
                 }
+                if Game::is_vic3()
+                    && code.name.is("Concept")
+                    && i == 0
+                    && let CodeArg::Literal(token) = &code.arguments[i]
+                    && let literal = token.as_str()
+                    && let name = literal.trim()
+                    && name != literal
+                    && !data.item_exists(Item::GameConcept, literal)
+                    && data.item_exists(Item::GameConcept, name)
+                {
+                    crate::report::tips(ErrorKey::Datafunctions)
+                        .msg(format!("Concept argument has whitespace around registered key `{name}`"))
+                        .info("The exact string differs from the registered key. Verify whether the game trims it.")
+                        .loc(token)
+                        .push();
+                    continue;
+                }
                 validate_argument(&code.arguments[i], data, sc, dc, *arg, lang, format);
             }
         }
@@ -758,6 +801,23 @@ pub fn validate_datatypes(
             } else {
                 let msg =
                     format!("{} returns {curtype} but a {expect_type} is needed here", code.name);
+                #[cfg(feature = "vic3")]
+                if Game::is_vic3()
+                    && ((lang.is_some()
+                        && code.name.is("GetNumInterestGroupMembers")
+                        && curtype == Datatype::int64
+                        && expect_type == Datatype::int32)
+                        || (curtype == Datatype::Vic3(Vic3Datatype::DataDynamicTrend)
+                            && expect_type == Datatype::Vic3(Vic3Datatype::DataTrend)))
+                {
+                    tips(ErrorKey::Datafunctions)
+                        .weak()
+                        .msg(msg)
+                        .info("The exported types differ. Verify conversion at runtime.")
+                        .loc(&code.name)
+                        .push();
+                    return Datatype::Unknown;
+                }
                 warn(ErrorKey::Datafunctions).msg(msg).loc(&code.name).push();
                 return Datatype::Unknown;
             }

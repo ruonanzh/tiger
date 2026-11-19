@@ -177,7 +177,11 @@ pub fn validate_trigger_internal(
             tips(ErrorKey::Performance).msg(msg).info(info).loc(block).push();
         } else if caller == "or" {
             let msg = "OR with only one item inside is probably not what you intended";
-            warn(ErrorKey::Logic).weak().msg(msg).loc(block).push();
+            if Game::is_vic3() {
+                tips(ErrorKey::Logic).weak().msg(msg).loc(block).push();
+            } else {
+                warn(ErrorKey::Logic).weak().msg(msg).loc(block).push();
+            }
         }
     }
 
@@ -391,6 +395,22 @@ pub fn validate_trigger_key_bv(
 
     // Scripted trigger?
     if let Some(trigger) = data.get_trigger(key) {
+        #[cfg(feature = "vic3")]
+        if Game::is_vic3()
+            && key.lowercase_is("is_on_front")
+            && sc.scopes(data) == Scopes::MilitaryFormation
+            && cmp == Comparator::Equals(Single)
+            && matches!(bv, BV::Value(value) if value.lowercase_is("yes") || value.lowercase_is("no"))
+        {
+            tips(ErrorKey::Scopes)
+                .weak()
+                .msg("is_on_front also has a built-in military formation signature")
+                .info("Verify which definition the game resolves at this call site")
+                .loc(key)
+                .loc_msg(&trigger.key, "same-named scripted trigger")
+                .push();
+            return side_effects;
+        }
         match bv {
             BV::Value(token) => {
                 if !(token.is("yes") || token.is("no") || token.is("YES") || token.is("NO")) {
@@ -432,6 +452,31 @@ pub fn validate_trigger_key_bv(
                     // TODO: check side_effects
                     trigger.validate_macro_expansion(key, &args, data, sc, tooltipped, negated);
                 }
+            }
+        }
+        return side_effects;
+    }
+
+    // The 1.15 export retains the obsolete boolean signature in the description of
+    // is_diplomatic_play_committed_participant. Its country-valued sibling uses _with.
+    if Game::is_vic3() && key.lowercase_is("is_diplomatic_play_participant") {
+        if let Some(value) = bv.expect_value() {
+            let msg = format!("legacy trigger `{key}`");
+            if value.lowercase_is("yes") || value.lowercase_is("no") {
+                tips(ErrorKey::Removed)
+                    .msg(msg)
+                    .info(
+                        "The current boolean trigger is is_diplomatic_play_committed_participant.",
+                    )
+                    .loc(key)
+                    .push();
+            } else {
+                err(ErrorKey::Validation)
+                    .msg(msg)
+                    .info("Use is_diplomatic_play_participant_with for a country target.")
+                    .loc(key)
+                    .loc_msg(value, "the legacy trigger takes a boolean")
+                    .push();
             }
         }
         return side_effects;
@@ -576,14 +621,35 @@ pub fn validate_trigger_key_bv(
                 } else if Game::is_hoi4() && is_character_token(part.as_str(), data) {
                     #[cfg(feature = "hoi4")]
                     sc.replace(Scopes::Character, part.clone());
-                } else if scope_effect(part, data).is_some() {
+                } else if scope_effect(part, data).is_some()
+                    || (Game::is_vic3()
+                        && part_flags.contains(PartFlags::First | PartFlags::Last)
+                        && data.get_effect(part).is_some())
+                {
                     let msg = format!("`{part}` is an effect, and can't be used in a trigger");
                     err(ErrorKey::WrongUse).msg(msg).loc(part).push();
                     sc.close();
                     return side_effects;
                 } else {
-                    // TODO: warn if trying to use iterator here
                     let msg = format!("unknown token `{part}`");
+                    #[cfg(feature = "vic3")]
+                    if Game::is_vic3()
+                        && part_flags.contains(PartFlags::First | PartFlags::Last)
+                        && let Some(candidate) = data.external_triggers.get(part.as_str())
+                    {
+                        tips(ErrorKey::UnknownField)
+                            .msg(format!(
+                                "external scripted trigger `{part}` has no active definition"
+                            ))
+                            .info(format!(
+                                "Workshop candidate: {}. Check whether it is required by this mod.",
+                                candidate.display()
+                            ))
+                            .loc(part)
+                            .push();
+                        sc.close();
+                        return side_effects;
+                    }
                     err(ErrorKey::UnknownField).msg(msg).loc(part).push();
                     sc.close();
                     return side_effects;
@@ -616,10 +682,11 @@ pub fn validate_trigger_rhs(
         if matches!(cmp, Comparator::NotEquals | Comparator::Equals(Double))
             && bv.get_value().is_some()
         {
-            let scopes = sc.scopes(data);
+            let (scopes, reason) = sc.scopes_reason(data);
+            let inferred = reason.is_runtime_inferred(data);
             sc.close();
             if let Some(token) = bv.expect_value() {
-                validate_target_ok_this(token, data, sc, scopes);
+                validate_target_with_provenance(token, data, sc, scopes, inferred);
             }
         } else if sc.can_be(Scopes::Value, data) {
             sc.close();
@@ -636,9 +703,10 @@ pub fn validate_trigger_rhs(
 
     match bv {
         BV::Value(t) => {
-            let scopes = sc.scopes(data);
+            let (scopes, reason) = sc.scopes_reason(data);
+            let inferred = reason.is_runtime_inferred(data);
             sc.close();
-            validate_target_ok_this(t, data, sc, scopes);
+            validate_target_with_provenance(t, data, sc, scopes, inferred);
         }
         BV::Block(b) => {
             sc.finalize_builder();
@@ -781,15 +849,30 @@ fn match_trigger_bv(
                 && name.lowercase_is("year")
                 && !matches!(cmp, Comparator::Equals(Question | Double))
                 && let Some(token) = bv.get_value()
-                && let Some(date) = Date::parse_full_calendar_date(token.as_str())
             {
-                tips(ErrorKey::Validation)
-                    .weak()
-                    .msg(format!("year {cmp} {date} uses a full date"))
-                    .info(format!("Use game_date {cmp} {date} to compare a full date."))
-                    .loc(token)
-                    .push();
-                return false;
+                let text = token.as_str().trim_end();
+                if let Some(date) = Date::parse_full_calendar_date(text) {
+                    tips(ErrorKey::Validation)
+                        .weak()
+                        .msg(format!("year {cmp} {date} uses a full date"))
+                        .info(format!("Use game_date {cmp} {date} to compare a full date."))
+                        .loc(token)
+                        .push();
+                    return false;
+                }
+                let unsigned = text.strip_prefix(['+', '-']).unwrap_or(text);
+                if unsigned.matches('.').count() == 2
+                    && unsigned
+                        .split('.')
+                        .all(|part| !part.is_empty() && part.bytes().all(|c| c.is_ascii_digit()))
+                {
+                    warn(ErrorKey::Validation)
+                        .msg(format!("year {cmp} {text} uses an invalid calendar date"))
+                        .info("Use a numeric year, or use game_date with a valid year.month.day.")
+                        .loc(token)
+                        .push();
+                    return false;
+                }
             }
             must_be_eq = false;
             // TODO: check side_effects
@@ -872,10 +955,8 @@ fn match_trigger_bv(
             }
         }
         Trigger::ScopeOrItem(s, i) => {
-            if let Some(token) = bv.expect_value()
-                && !data.item_exists(*i, token.as_str())
-            {
-                validate_target(token, data, sc, *s);
+            if let Some(token) = bv.expect_value() {
+                validate_item_or_target(token, data, sc, *i, *s, max_sev);
             }
         }
         Trigger::Choice(choices) => {
@@ -1359,7 +1440,7 @@ fn match_trigger_bv(
         }
         #[cfg(any(feature = "ck3", feature = "vic3", feature = "eu5"))]
         Trigger::Removed(msg, info) => {
-            err(ErrorKey::Removed).msg(*msg).info(*info).loc(name).push();
+            err(ErrorKey::Removed).advisory_in_vic3().msg(*msg).info(*info).loc(name).push();
         }
         Trigger::UncheckedValue => {
             bv.expect_value();
@@ -1397,6 +1478,19 @@ pub fn validate_target_ok_this(
     sc: &mut ScopeContext,
     outscopes: Scopes,
 ) -> Scopes {
+    validate_target_with_provenance(token, data, sc, outscopes, false)
+}
+
+fn validate_target_with_provenance(
+    token: &Token,
+    data: &Everything,
+    sc: &mut ScopeContext,
+    outscopes: Scopes,
+    expected_inferred: bool,
+) -> Scopes {
+    let diagnostic = || {
+        if expected_inferred { tips(ErrorKey::Scopes).weak() } else { warn(ErrorKey::Scopes) }
+    };
     if token.is_number() {
         #[allow(unused_mut)] // only needs mut for hoi4
         let mut number_scope = Scopes::Value;
@@ -1406,7 +1500,7 @@ pub fn validate_target_ok_this(
         }
         if !outscopes.intersects(number_scope | Scopes::None) {
             let msg = format!("expected {outscopes}");
-            warn(ErrorKey::Scopes).msg(msg).loc(token).push();
+            diagnostic().msg(msg).loc(token).push();
         }
         return number_scope;
     }
@@ -1548,7 +1642,8 @@ pub fn validate_target_ok_this(
         // Must not be at the same location to avoid spurious error messages
         let opt_loc = (last_part.loc() != because.token().loc).then(|| because.token());
         let msg2 = format!("scope was {}", because.msg());
-        warn(ErrorKey::Scopes).msg(msg).loc(last_part).opt_loc_msg(opt_loc, msg2).push();
+        let report = if expected_inferred { diagnostic() } else { because.scope_diagnostic(data) };
+        report.msg(msg).loc(last_part).opt_loc_msg(opt_loc, msg2).push();
     }
     sc.close();
     final_scopes
@@ -1564,9 +1659,47 @@ pub fn validate_target(
 ) -> Scopes {
     if token.is("this") {
         let msg = "target `this` makes no sense here";
-        warn(ErrorKey::UseOfThis).msg(msg).loc(token).push();
+        warn(ErrorKey::UseOfThis).advisory_in_vic3().msg(msg).loc(token).push();
     }
     validate_target_ok_this(token, data, sc, outscopes)
+}
+
+/// Validate an operand that accepts either a database key or a scope target.
+pub(crate) fn validate_item_or_target(
+    token: &Token,
+    data: &Everything,
+    sc: &mut ScopeContext,
+    item: Item,
+    scopes: Scopes,
+    max_sev: Severity,
+) {
+    if data.item_exists(item, token.as_str()) {
+        return;
+    }
+    #[cfg(feature = "vic3")]
+    if Game::is_vic3()
+        && matches!(
+            item,
+            Item::Technology
+                | Item::CommanderOrder
+                | Item::BuildingType
+                | Item::StrategicRegion
+                | Item::Ideology
+                | Item::Country
+        )
+        && !token.is("")
+        && !token.is_number()
+        && !token.as_str().contains([':', '.', '(', ')'])
+        && !matches!(Lowercase::new(token.as_str()).as_str(), "root" | "prev" | "this")
+        && !data.script_value_exists(token.as_str())
+        && scope_to_scope(token, sc.scopes(data)).is_none()
+        && trigger_comparevalue(token, data).is_none()
+    {
+        data.verify_exists_max_sev(item, token, max_sev);
+        return;
+    }
+    let _ = max_sev;
+    validate_target(token, data, sc, scopes);
 }
 
 /// A part in a token chain
@@ -1862,7 +1995,7 @@ fn validate_argument_internal(
         #[cfg(feature = "ck3")]
         ArgumentValue::Removed(version, info) => {
             let msg = format!("removed in {version}");
-            err(ErrorKey::Removed).msg(msg).info(info).loc(arg).push();
+            err(ErrorKey::Removed).advisory_in_vic3().msg(msg).info(info).loc(arg).push();
         }
     }
 }
@@ -1878,13 +2011,29 @@ pub fn validate_argument_scope(
     sc: &mut ScopeContext,
 ) {
     validate_inscopes(part_flags, func, inscopes, sc, data);
-    validate_argument_internal(arg, validation, data, sc);
+    match validation {
+        #[cfg(feature = "vic3")]
+        ArgumentValue::Item(Item::InterestGroup)
+            if Game::is_vic3()
+                && (func.lowercase_is("ig") || func.lowercase_is("ig_type"))
+                && arg.starts_with("scope:") =>
+        {
+            let msg = format!("interest group {arg} not defined in {}", Item::InterestGroup.path());
+            err(ErrorKey::MissingItem)
+                .strong()
+                .msg(msg)
+                .info("Use a literal interest group type or a saved scope without the ig: prefix.")
+                .loc(arg)
+                .push();
+        }
+        _ => validate_argument_internal(arg, validation, data, sc),
+    }
 
     if func.lowercase_is("scope") {
         if part_flags.contains(PartFlags::Last | PartFlags::Question) {
             sc.exists_scope(arg.as_str(), part);
         }
-        sc.replace_named_scope(arg.as_str(), part);
+        sc.replace_named_scope(arg.as_str(), part, part_flags.contains(PartFlags::Question));
     } else if func.lowercase_is("local_var") {
         if part_flags.contains(PartFlags::Last | PartFlags::Question) {
             sc.exists_local(arg.as_str(), part);
@@ -1947,12 +2096,59 @@ pub fn validate_argument(
 
     let func_lc = func.as_str().to_ascii_lowercase();
     if let Some((inscopes, validation, outscopes)) = scope_trigger_complex(&func_lc) {
-        sc.expect(inscopes, &Reason::Token(func.clone()), data);
+        let (current, origin) = sc.scopes_reason(data);
+        #[cfg(feature = "vic3")]
+        let unresolved_custom_loca_progress = Game::is_vic3()
+            && func_lc == "scripted_bar_progress"
+            && current == Scopes::Country
+            && origin.token().is("country")
+            && origin.token().loc.kind.counts_as_vanilla()
+            && origin.token().loc.pathname() == func.loc.pathname()
+            && func.loc.pathname().starts_with("common/customizable_localization");
+        #[cfg(not(feature = "vic3"))]
+        let unresolved_custom_loca_progress = false;
+        if unresolved_custom_loca_progress {
+            tips(ErrorKey::Scopes)
+                .weak()
+                .msg(format!(
+                    "`{func}` is for {inscopes} but the custom localization declares {current}"
+                ))
+                .info("Verify the receiver and the consumer of this legacy progress expression")
+                .loc(func)
+                .loc_msg(origin.token(), "declared scope")
+                .push();
+        } else {
+            sc.expect(inscopes, &Reason::Token(func.clone()), data);
+        }
         validate_argument_internal(arg, validation, data, sc);
         sc.replace(outscopes, func.clone());
     } else if let Some(entry) = scope_prefix(func) {
         validate_argument_scope(part_flags, entry, part, func, arg, data, sc);
     } else {
+        #[cfg(feature = "vic3")]
+        if Game::is_vic3() && func_lc == "loyalist_fraction" {
+            tips(ErrorKey::Validation)
+                .msg("parenthesized loyalist_fraction needs verification")
+                .info("The game exports a block form; a bundled script value uses this parenthesized expression.")
+                .loc(func)
+                .push();
+            validate_target(arg, data, sc, Scopes::Culture);
+            sc.replace(Scopes::all_but_none(), part.clone());
+            return;
+        }
+        #[cfg(feature = "vic3")]
+        if Game::is_vic3()
+            && let Some((version, explanation)) =
+                crate::vic3::tables::targets::scope_to_scope_removed(&func_lc)
+        {
+            err(ErrorKey::Removed)
+                .msg(format!("`{func}` was removed in {version}"))
+                .opt_info((!explanation.is_empty()).then_some(explanation))
+                .loc(func)
+                .push();
+            sc.replace(Scopes::all_but_none(), part.clone());
+            return;
+        }
         let msg = format!("unknown token `{func}:`");
         err(ErrorKey::Validation).msg(msg).loc(func).push();
     }
@@ -1996,7 +2192,14 @@ pub fn validate_prefix(
         true
     } else {
         let msg = format!("unknown prefix `{prefix:}`");
-        err(ErrorKey::Validation).msg(msg).loc(prefix).push();
+        err(ErrorKey::Validation)
+            .msg(msg)
+            .opt_info(
+                (Game::is_vic3() && prefix.lowercase_is("socpe"))
+                    .then_some("Use scope: for a saved scope."),
+            )
+            .loc(prefix)
+            .push();
         false
     }
 }

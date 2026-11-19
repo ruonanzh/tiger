@@ -54,7 +54,7 @@ impl History {
             if *name == "CONSCRIPTION" {
                 let msg = "CONSCRIPTION history is not processed by the game";
                 let info = "as of 1.9.7";
-                warn(ErrorKey::Bugs).msg(msg).info(info).loc(&item.key).push();
+                warn(ErrorKey::Bugs).advisory_in_vic3().msg(msg).info(info).loc(&item.key).push();
                 continue;
             }
             let msg = format!("unknown history classification `{name}`");

@@ -54,7 +54,7 @@ impl DbKind for CommanderOrder {
             if block.has_key_recursive("error_check") {
                 let msg = "error_check is no longer used to control visibility";
                 let info = "there is now a separate `visible` trigger";
-                warn(ErrorKey::Removed).msg(msg).info(info).loc(key).push();
+                warn(ErrorKey::Removed).advisory_in_vic3().msg(msg).info(info).loc(key).push();
             }
             // TODO: `NOT = { has_trait = foo }` in this trigger will be misrepresented in the UI
             let mut sc = ScopeContext::new(Scopes::Character, key);

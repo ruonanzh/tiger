@@ -1,9 +1,9 @@
 use crate::block::Block;
 use crate::db::{Db, DbKind};
 use crate::everything::Everything;
-use crate::game::GameFlags;
+use crate::game::{Game, GameFlags};
 use crate::item::{Item, ItemLoader};
-use crate::report::{ErrorKey, err, warn};
+use crate::report::{ErrorKey, Severity, err, warn};
 use crate::token::Token;
 use crate::validator::Validator;
 
@@ -42,7 +42,20 @@ impl DbKind for Accessory {
             if let Some(token) = vd.field_value("required_tags") {
                 for tag in token.split(',') {
                     if !tag.is("") {
-                        data.verify_exists(Item::AccessoryTag, &tag);
+                        let possible_gene_provider = Game::is_vic3()
+                            && !data.item_exists(Item::AccessoryTag, tag.as_str())
+                            && data.iter_keys(Item::GeneCategory).any(|category| {
+                                data.item_has_property(
+                                    Item::GeneCategory,
+                                    category.as_str(),
+                                    tag.as_str(),
+                                )
+                            });
+                        if possible_gene_provider {
+                            data.verify_exists_max_sev(Item::AccessoryTag, &tag, Severity::Tips);
+                        } else {
+                            data.verify_exists(Item::AccessoryTag, &tag);
+                        }
                     }
                 }
             }

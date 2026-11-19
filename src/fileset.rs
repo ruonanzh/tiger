@@ -756,10 +756,18 @@ impl Fileset {
         self.mark_used(&file.replace("//", "/"));
         if !self.exists(file) {
             let msg = format!("file {file} does not exist");
-            let diagnostic =
-                report(ErrorKey::MissingFile, Item::File.severity().at_most(max_sev)).msg(msg);
             let candidates =
                 if Game::is_vic3() { self.missing_file_candidates(file) } else { Vec::new() };
+            let severity = if let [candidate] = candidates.as_slice()
+                && candidate.eq_ignore_ascii_case(file.trim_start_matches('/'))
+            {
+                Severity::Warning
+            } else if !candidates.is_empty() {
+                Severity::Tips
+            } else {
+                Item::File.severity()
+            };
+            let diagnostic = report(ErrorKey::MissingFile, severity.at_most(max_sev)).msg(msg);
             let diagnostic = if candidates.is_empty() {
                 diagnostic
             } else {

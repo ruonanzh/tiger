@@ -3,9 +3,9 @@ use crate::context::ScopeContext;
 use crate::data::localization::Language;
 use crate::db::{Db, DbKind};
 use crate::everything::Everything;
-use crate::game::GameFlags;
+use crate::game::{Game, GameFlags};
 use crate::item::{Item, ItemLoader};
-use crate::report::{ErrorKey, warn};
+use crate::report::{ErrorKey, tips, warn};
 use crate::scopes::Scopes;
 use crate::token::Token;
 use crate::tooltipped::Tooltipped;
@@ -49,6 +49,16 @@ impl DbKind for CustomLocalization {
         sc.set_strict_scopes(false);
         vd.field_bool("log_loc_errors");
         vd.field_bool("random_valid");
+        if Game::is_vic3()
+            && let Some(field) = block.get_key("first_valid")
+        {
+            vd.field("first_valid");
+            tips(ErrorKey::UnknownField)
+                .msg("custom localization selects the first valid text by default")
+                .info("random_valid controls random selection. Check whether first_valid was intended for a description block.")
+                .loc(field)
+                .push();
+        }
 
         #[cfg(feature = "eu5")]
         vd.field_choice("if_invalid_loc", INVALID_LOC_HANDLING);

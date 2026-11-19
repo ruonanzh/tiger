@@ -1,7 +1,7 @@
 use std::fs;
 use std::path::Path;
 
-use tiger_lib::{Everything, Game, take_reports};
+use tiger_lib::{Confidence, Everything, Game, Severity, take_reports};
 
 const ALERTS: &str = "common/alert_types/scope_fixture.txt";
 const SHIPS: &str = "common/ship_modifications/scope_fixture.txt";
@@ -104,19 +104,26 @@ fn validates_ship_weights_treaty_article_triggers_and_typed_trigger_operands() {
                 let loc = &pointers[0].loc;
                 for path in [ALERTS, SHIPS, ARTICLES, EVENTS] {
                     if loc.pathname() == Path::new(path) {
-                        scope_reports.push((path, report.msg.clone()));
+                        scope_reports.push((
+                            path,
+                            report.msg.clone(),
+                            report.severity,
+                            report.confidence,
+                        ));
                     }
                 }
             }
         }
-        let reports_for = |path| scope_reports.iter().filter(|(p, _)| *p == path).count();
+        let reports_for = |path| scope_reports.iter().filter(|(p, ..)| *p == path).count();
         assert_eq!(reports_for(ALERTS), usize::from(broken), "{scope_reports:?}");
         assert_eq!(reports_for(SHIPS), usize::from(broken), "{scope_reports:?}");
         assert_eq!(reports_for(ARTICLES), if broken { 5 } else { 1 }, "{scope_reports:?}");
         // The same ship weight used outside a ship modification must still require its input.
         for consumer in [ARTICLES, EVENTS] {
             assert!(
-                scope_reports.iter().any(|(path, msg)| *path == consumer
+                scope_reports.iter().any(|(path, msg, severity, confidence)| *path == consumer
+                    && *severity == Severity::Tips
+                    && *confidence == Confidence::Weak
                     && msg
                         == "`fixture_ship_weight` expects scope:ship_modification_type to be set"),
                 "missing scope diagnostic in {consumer}: {scope_reports:?}"

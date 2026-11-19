@@ -28,7 +28,7 @@ pub fn lookup_modif(name: &Token, data: &Everything, warn: Option<Severity>) -> 
         } else {
             "Tiger does not recognize this modifier shape. Check its provider and use in the effective load set."
         };
-        report(ErrorKey::MissingItem, sev)
+        report(ErrorKey::MissingItem, sev.at_most(Severity::Tips))
             .msg("modifier type definition does not exist")
             .info(info)
             .wiki("https://vic3.paradoxwikis.com/Modifier_types#Defining_modifier_types")
@@ -71,7 +71,11 @@ pub fn lookup_engine_modif(
     if let Some(info) = MODIF_REMOVED_MAP.get(name_lc).copied() {
         if let Some(sev) = warn {
             let msg = format!("{name} has been removed");
-            report(ErrorKey::Removed, sev).msg(msg).info(info).loc(name).push();
+            report(ErrorKey::Removed, sev.at_most(Severity::Tips))
+                .msg(msg)
+                .info(info)
+                .loc(name)
+                .push();
         }
         return None;
     }
@@ -145,7 +149,11 @@ pub fn lookup_engine_modif(
             if let Some(sev) = warn {
                 let msg = format!("`{name}` was removed in 1.5");
                 let info = "it was replaced with `_add`";
-                report(ErrorKey::Removed, sev).msg(msg).info(info).loc(name).push();
+                report(ErrorKey::Removed, sev.at_most(Severity::Tips))
+                    .msg(msg)
+                    .info(info)
+                    .loc(name)
+                    .push();
             }
             return Some(ModifKinds::Building);
         }
@@ -157,7 +165,11 @@ pub fn lookup_engine_modif(
         if let Some(sev) = warn {
             let msg = format!("`{name}` was removed in 1.5");
             let info = "it was replaced with `_add`";
-            report(ErrorKey::Removed, sev).msg(msg).info(info).loc(name).push();
+            report(ErrorKey::Removed, sev.at_most(Severity::Tips))
+                .msg(msg)
+                .info(info)
+                .loc(name)
+                .push();
         }
         return Some(ModifKinds::Building);
     }
@@ -197,7 +209,11 @@ pub fn lookup_engine_modif(
         if let Some(sev) = warn {
             let msg = format!("`{name}` was removed in 1.5");
             let info = format!("replaced with `goods_input_{part}_add`");
-            report(ErrorKey::Removed, sev).msg(msg).info(info).loc(name).push();
+            report(ErrorKey::Removed, sev.at_most(Severity::Tips))
+                .msg(msg)
+                .info(info)
+                .loc(name)
+                .push();
         }
         return Some(ModifKinds::Building);
     }
@@ -230,7 +246,11 @@ pub fn lookup_engine_modif(
                 if let Some(sev) = warn {
                     let msg = format!("`{name}` was removed in 1.5");
                     let info = format!("it was replaced with `goods_output_{part}{sfx}`");
-                    report(ErrorKey::Removed, sev).msg(msg).info(info).loc(name).push();
+                    report(ErrorKey::Removed, sev.at_most(Severity::Tips))
+                        .msg(msg)
+                        .info(info)
+                        .loc(name)
+                        .push();
                 }
                 return Some(ModifKinds::Building);
             }
@@ -314,7 +334,7 @@ pub fn lookup_engine_modif(
         maybe_warn(Item::BuildingGroup, &part, name, data, warn);
         if let Some(sev) = warn {
             let msg = format!("`{name}` was removed in 1.7");
-            report(ErrorKey::Removed, sev).msg(msg).loc(name).push();
+            report(ErrorKey::Removed, sev.at_most(Severity::Tips)).msg(msg).loc(name).push();
         }
         return Some(ModifKinds::Country);
     }
@@ -546,7 +566,10 @@ pub fn lookup_engine_modif(
                 if data.item_exists_lc(Item::LawType, &part) {
                     if let Some(sev) = warn {
                         let msg = "support for law types has been replaced by support for political movements";
-                        report(ErrorKey::Removed, sev).msg(msg).loc(name).push();
+                        report(ErrorKey::Removed, sev.at_most(Severity::Tips))
+                            .msg(msg)
+                            .loc(name)
+                            .push();
                     }
                 } else {
                     maybe_warn(Item::PoliticalMovement, &part, name, data, warn);
@@ -706,8 +729,12 @@ fn maybe_warn(itype: Item, s: &Lowercase, name: &Token, data: &Everything, warn:
         && !data.item_exists_lc(itype, s)
     {
         let msg = format!("could not find {itype} {s}");
-        let info = format!("so the modifier {name} will have no effect");
-        report(ErrorKey::MissingItem, sev).strong().msg(msg).info(info).loc(name).push();
+        let info = format!("Check the indexed provider for generated modifier {name}.");
+        report(ErrorKey::MissingItem, sev.at_most(Severity::Tips))
+            .msg(msg)
+            .info(info)
+            .loc(name)
+            .push();
     }
 }
 

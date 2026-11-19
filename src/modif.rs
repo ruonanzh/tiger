@@ -43,7 +43,17 @@ pub fn validate_modifs<'a, MK: ModifKinds>(
     _block: &Block,
     data: &'a Everything,
     kinds: MK,
+    vd: Validator<'a>,
+) {
+    validate_modifs_with_flow(_block, data, kinds, vd, ModifKinds::require);
+}
+
+pub fn validate_modifs_with_flow<'a, MK: ModifKinds>(
+    _block: &Block,
+    data: &'a Everything,
+    kinds: MK,
     mut vd: Validator<'a>,
+    require: impl Fn(MK, MK, &Token),
 ) {
     #[cfg(feature = "hoi4")]
     vd.field_validated_block("hidden_modifier", |block, data| {
@@ -51,7 +61,7 @@ pub fn validate_modifs<'a, MK: ModifKinds>(
         // Same as below, but with no loca check
         vd.unknown_fields(|key, bv| {
             if let Some(mk) = MK::lookup_modif(key, data, Some(Severity::Error)) {
-                kinds.require(mk, key);
+                require(kinds, mk, key);
 
                 // TODO HOI4
                 let _ = &bv;
@@ -80,7 +90,7 @@ pub fn validate_modifs<'a, MK: ModifKinds>(
         }
 
         if let Some(mk) = MK::lookup_modif(key, data, Some(Severity::Error)) {
-            kinds.require(mk, key);
+            require(kinds, mk, key);
             if Game::is_jomini() {
                 #[cfg(feature = "jomini")]
                 validate_non_dynamic_script_value(bv, data);

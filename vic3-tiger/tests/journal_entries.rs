@@ -693,7 +693,7 @@ je_test_events.2 = {
     immediate = { trigger_event = je_test_events.1 }",
     );
     let reports = validate(&game, &mod_dir, &script);
-    for (line, severity) in [(6, "warning"), (13, "error")] {
+    for (line, severity) in [(6, "tips"), (13, "tips")] {
         assert!(
             reports.iter().any(|report| {
                 report.key == "strict-scopes"
@@ -772,7 +772,7 @@ fn journal_entry_map_modes() {
     for line in [5, 13] {
         assert!(
             dynamic.iter().any(|report| {
-                report.severity == "warning"
+                report.severity == "tips"
                     && report.message.contains("scope:map_runtime_owner might not be available")
                     && report.locations.first().is_some_and(|location| {
                         location.from == "MOD"

@@ -26,6 +26,20 @@ pub struct ScriptValues {
 
 impl ScriptValues {
     fn load_item(&mut self, key: &Token, bv: &BV) {
+        if crate::game::Game::is_vic3()
+            && let Some(other) = self.script_values.get(key.as_str())
+            && other.explicit_override
+        {
+            if !other.bv.equivalent(bv) {
+                crate::report::tips(ErrorKey::Prefixes)
+                    .msg("plain script value loads after an explicit override")
+                    .info("Tiger retains the explicit override. Verify engine precedence.")
+                    .loc(key)
+                    .loc_msg(&other.key, "explicit override loaded here")
+                    .push();
+            }
+            return;
+        }
         if let Some(other) = self.script_values.get(key.as_str())
             && other.key.loc.kind >= key.loc.kind
         {
@@ -44,8 +58,12 @@ impl ScriptValues {
             }) {
                 PrefixShould::Insert(name) => {
                     let scope_override = self.scope_overrides.get(name.as_str()).copied();
-                    self.script_values
-                        .insert(name.as_str(), ScriptValue::new(name, bv.clone(), scope_override));
+                    let explicit_override = key.split_once(':').is_some_and(|(prefix, _)| {
+                        matches!(prefix.as_str(), "REPLACE" | "TRY_REPLACE" | "REPLACE_OR_CREATE")
+                    });
+                    let mut entry = ScriptValue::new(name, bv.clone(), scope_override);
+                    entry.explicit_override = explicit_override;
+                    self.script_values.insert(entry.key.as_str(), entry);
                 }
                 #[cfg(any(feature = "vic3", feature = "eu5"))]
                 PrefixShould::Inject(name) => match bv {
@@ -155,6 +173,7 @@ impl FileHandler<Block> for ScriptValues {
 #[derive(Debug)]
 pub struct ScriptValue {
     key: Token,
+    explicit_override: bool,
     bv: BV,
     cache: RwLock<TigerHashMap<Loc, ScopeContext>>,
     scope_override: Option<Scopes>,
@@ -205,7 +224,13 @@ impl Drop for InferenceGuard {
 
 impl ScriptValue {
     pub fn new(key: Token, bv: BV, scope_override: Option<Scopes>) -> Self {
-        Self { key, bv, cache: RwLock::new(TigerHashMap::default()), scope_override }
+        Self {
+            key,
+            bv,
+            cache: RwLock::new(TigerHashMap::default()),
+            scope_override,
+            explicit_override: false,
+        }
     }
 
     fn with_inferred_context(

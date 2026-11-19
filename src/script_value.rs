@@ -108,7 +108,7 @@ fn validate_inner(
         {
             if have_value == TriBool::False {
                 let msg = format!("nothing to {token} yet");
-                warn(ErrorKey::Logic).msg(msg).loc(token).push();
+                warn(ErrorKey::Logic).advisory_in_vic3().msg(msg).loc(token).push();
             }
             validate_bv_with_mode(bv, data, sc, mode);
             made_changes = true;
@@ -116,23 +116,24 @@ fn validate_inner(
         } else if token.is("round") || token.is("ceiling") || token.is("floor") || token.is("abs") {
             if have_value == TriBool::False {
                 let msg = format!("nothing to {token} yet");
-                warn(ErrorKey::Logic).msg(msg).loc(token).push();
+                warn(ErrorKey::Logic).advisory_in_vic3().msg(msg).loc(token).push();
             }
             if let Some(value) = bv.expect_value() {
                 #[cfg(not(feature = "imperator"))]
                 if !value.is("yes") && !value.is("no") {
                     if crate::Game::is_vic3() && token.is("round") && value.is("1") {
                         warn(ErrorKey::Validation)
+                            .advisory_in_vic3()
                             .weak()
                             .msg("round = 1 uses an undocumented numeric argument")
                             .info("The documented form uses yes or no. Verify the intended behavior before changing it.")
                             .loc(value)
                             .push();
                     } else if crate::Game::is_vic3() && token.is("floor") && value.is_number() {
-                        warn(ErrorKey::Validation)
+                        tips(ErrorKey::Validation)
                             .weak()
                             .msg("floor expects yes or no")
-                            .info("Use floor = yes for rounding down. If the intent is a lower bound, use min.")
+                            .info("Verify how the numeric argument is interpreted. Use floor = yes for rounding down, or max for a lower bound.")
                             .loc(value)
                             .push();
                     } else {
@@ -211,6 +212,13 @@ fn validate_inner(
                 }
             }
         } else {
+            if crate::Game::is_vic3() && bv.get_value().is_some() && data.get_effect(token).is_some() {
+                err(ErrorKey::WrongUse)
+                    .msg(format!("`{token}` is an effect and cannot be used as a script value operation"))
+                    .loc(token)
+                    .push();
+                return;
+            }
             if let Some((it_type, it_name)) = token.split_once('_')
                 && let Ok(ltype) = ListType::try_from(it_type.as_str())
             {
@@ -281,7 +289,7 @@ fn validate_iterator(
     if !side_effects {
         let msg = "this iterator does not change the script value";
         let info = "it should be either removed, or changed to do something useful";
-        err(ErrorKey::Logic).msg(msg).info(info).loc(block).push();
+        err(ErrorKey::Logic).advisory_in_vic3().msg(msg).info(info).loc(block).push();
     }
 }
 
@@ -325,7 +333,7 @@ fn validate_if(
         let msg = format!("this `{key}` does not change the script value");
         // weak because in an if-if_else sequence you might want some that deliberately do nothing
         // TODO: make this smarter so that it does not warn if followed by an else or else_if
-        err(ErrorKey::Logic).weak().msg(msg).loc(key).push();
+        err(ErrorKey::Logic).advisory_in_vic3().weak().msg(msg).loc(key).push();
     }
 }
 

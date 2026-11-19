@@ -300,11 +300,27 @@ pub fn validate_set_variable(
                             let outscopes = validate_target_ok_this(token, data, sc, target_scopes);
                             sc.set_local_variable(name, outscopes);
                         } else if key.as_str().contains("_global_") {
-                            let target_scopes = data.global_scopes.scopes(name.as_str());
+                            // An inferred registry entry is not a constraint on assignment.
+                            // Record type changes below and keep validating the RHS expression.
+                            let target_scopes = if Game::is_vic3()
+                                && !data.global_scopes.is_configured(name.as_str())
+                            {
+                                Scopes::all()
+                            } else {
+                                data.global_scopes.scopes(name.as_str())
+                            };
                             let outscopes = validate_target_ok_this(token, data, sc, target_scopes);
                             data.global_scopes.expect(name.as_str(), name, outscopes);
                         } else {
-                            let target_scopes = data.variable_scopes.scopes(name.as_str());
+                            // An inferred registry entry is not a constraint on assignment.
+                            // Record type changes below and keep validating the RHS expression.
+                            let target_scopes = if Game::is_vic3()
+                                && !data.variable_scopes.is_configured(name.as_str())
+                            {
+                                Scopes::all()
+                            } else {
+                                data.variable_scopes.scopes(name.as_str())
+                            };
                             let outscopes = validate_target_ok_this(token, data, sc, target_scopes);
                             data.variable_scopes.expect(name.as_str(), name, outscopes);
                         }

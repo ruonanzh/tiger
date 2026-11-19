@@ -24,7 +24,9 @@ use crate::script_value::{validate_scripted_progress, validate_vic3_button_ai_ch
 use crate::special_tokens::SpecialTokens;
 use crate::token::Token;
 use crate::tooltipped::Tooltipped;
-use crate::trigger::{validate_target, validate_target_ok_this, validate_trigger_internal};
+use crate::trigger::{
+    validate_item_or_target, validate_target, validate_target_ok_this, validate_trigger_internal,
+};
 use crate::validate::{ListType, validate_identifier};
 
 pub use self::value_validator::ValueValidator;
@@ -186,7 +188,7 @@ impl<'a> Validator<'a> {
                 }
                 _ => "Verify whether a condition was intended and how the branch runs without it.",
             };
-            report(ErrorKey::FieldMissing, Severity::Warning.at_most(self.max_severity))
+            report(ErrorKey::FieldMissing, Severity::Tips.at_most(self.max_severity))
                 .weak()
                 .msg(msg)
                 .info(info)
@@ -635,12 +637,10 @@ impl<'a> Validator<'a> {
         itype: Item,
         outscopes: Scopes,
     ) -> bool {
+        let max_sev = self.max_severity;
         self.field_check(name, AllowInject::Yes, |_, bv| {
-            if let Some(token) = bv.expect_value()
-                && !self.data.item_exists(itype, token.as_str())
-            {
-                // TODO: pass max_severity here
-                validate_target(token, self.data, sc, outscopes);
+            if let Some(token) = bv.expect_value() {
+                validate_item_or_target(token, self.data, sc, itype, outscopes, max_sev);
             }
         })
     }
@@ -1865,6 +1865,17 @@ impl<'a> Validator<'a> {
             let sev = Severity::Untidy.at_most(self.max_severity);
             report(ErrorKey::Unneeded, sev).msg(msg).loc(key).push();
         }
+    }
+
+    /// Report a field whose behavior at this consumer has not been established.
+    #[cfg(feature = "vic3")]
+    pub(crate) fn uncertain_field(&mut self, name: &str) {
+        self.field_validated_key(name, |key, _, _| {
+            crate::report::tips(ErrorKey::UnknownField)
+                .msg(format!("support for field `{key}` needs verification"))
+                .loc(key)
+                .push();
+        });
     }
 
     /// Expect the block to contain any number of loose values (possibly in addition to other things).

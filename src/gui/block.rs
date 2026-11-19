@@ -209,15 +209,22 @@ impl GuiBlock {
                             err(ErrorKey::WrongGame).weak().msg(msg).loc(key).push();
                         } else {
                             let msg = format!("unknown gui field `{key}`");
-                            err(ErrorKey::UnknownField)
-                                .weak()
-                                .msg(msg)
-                                .opt_info(
-                                    (Game::is_vic3() && key_lc == "sstart_sound")
-                                        .then_some("Use start_sound for this GUI property."),
+                            let diagnostic = err(ErrorKey::UnknownField);
+                            let info = if Game::is_vic3() && key_lc == "sstart_sound" {
+                                Some("Use start_sound for this GUI property.")
+                            } else if Game::is_vic3() && key_lc == "building_auto_expand" {
+                                Some(
+                                    "The current game defines building_auto_expand_toggle in gui/building_details_panel.gui.",
                                 )
-                                .loc(key)
-                                .push();
+                            } else {
+                                None
+                            };
+                            let diagnostic = if info.is_some() {
+                                diagnostic.strong()
+                            } else {
+                                diagnostic.weak()
+                            };
+                            diagnostic.msg(msg).opt_info(info).loc(key).push();
                         }
                     } else if let Some(key) = item.expect_value() {
                         let key_lc = Lowercase::new(key.as_str());

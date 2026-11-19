@@ -4,7 +4,7 @@ use crate::db::{Db, DbKind};
 use crate::everything::Everything;
 use crate::game::GameFlags;
 use crate::item::{Item, ItemLoader};
-use crate::report::{ErrorKey, warn};
+use crate::report::{ErrorKey, Severity, warn};
 use crate::scopes::Scopes;
 use crate::script_value::validate_script_value;
 use crate::token::Token;
@@ -190,7 +190,7 @@ impl DbKind for AiStrategy {
             });
         });
         vd.field_script_value_rooted("max_ship_design_complexity", Scopes::Country);
-        vd.field_script_value_rooted("wanted_naval_fortification_levels", Scopes::Country);
+        vd.field_script_value_rooted("wanted_naval_fortification_levels", Scopes::State);
 
         vd.field_validated_key_block(
             "combat_unit_group_weights",
@@ -327,7 +327,7 @@ fn validate_wargoal_scores(key: &Token, block: &Block, data: &Everything) {
     sc.define_name("target_country", Scopes::Country, key);
     sc.define_name("target_state", Scopes::State, key); // might not be set
     vd.unknown_fields(|key, bv| {
-        data.verify_exists(Item::WarGoalType, key);
+        verify_ai_wargoal_key(key, data);
         validate_script_value(bv, data, &mut sc);
     });
 }
@@ -335,9 +335,24 @@ fn validate_wargoal_scores(key: &Token, block: &Block, data: &Everything) {
 fn validate_wargoal_weights(_key: &Token, block: &Block, data: &Everything) {
     let mut vd = Validator::new(block, data);
     vd.unknown_value_fields(|key, token| {
-        data.verify_exists(Item::WarGoalType, key);
+        verify_ai_wargoal_key(key, data);
         token.expect_number();
     });
+}
+
+fn verify_ai_wargoal_key(key: &Token, data: &Everything) {
+    // The stock AI uses both concrete keys and names that occur as a war goal's kind.
+    // Keep alternate kinds visible without claiming that both spellings are valid engine IDs.
+    if !data.item_exists(Item::WarGoalType, key.as_str())
+        && data.iter_keys(Item::WarGoalType).any(|candidate| {
+            data.get_key_block(Item::WarGoalType, candidate.as_str())
+                .is_some_and(|(_, goal)| goal.field_value_is("kind", key.as_str()))
+        })
+    {
+        data.verify_exists_max_sev(Item::WarGoalType, key, Severity::Tips);
+    } else {
+        data.verify_exists(Item::WarGoalType, key);
+    }
 }
 
 fn validate_strait_scores(_key: &Token, block: &Block, data: &Everything) {

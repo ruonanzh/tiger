@@ -60,8 +60,6 @@ impl DbKind for JournalEntry {
         country_sc.define_name("journal_entry", Scopes::JournalEntry, key);
         country_sc.define_name("target", Scopes::all(), key);
 
-        sc.advise_on_missing_saved_scopes();
-        country_sc.advise_on_missing_saved_scopes();
         let mut outcome_sc = sc.clone();
         let mut outcome_country_sc = country_sc.clone();
         vd.field_item("group", Item::JournalEntryGroup);
@@ -163,7 +161,6 @@ impl DbKind for JournalEntry {
 
         // Map modes are evaluated for each state, with a scope context separate from the JE.
         let mut map_sc = ScopeContext::new(Scopes::State, key);
-        map_sc.advise_on_missing_saved_scopes();
         for field in ["map_color", "map_color_second"] {
             vd.field_validated_block_sc(field, &mut map_sc.clone(), |block, data, sc| {
                 validate_map_color(block, data, sc, false);
@@ -261,8 +258,10 @@ impl DbKind for JournalEntry {
             if !vd.field_validated_sc("progress_desc", &mut sc, validate_desc) {
                 data.mark_used(Item::Localization, &format!("{key}_progress"));
             }
+        } else if block.get_key("scripted_progress_bar").is_some() {
+            vd.uncertain_field("progress_desc");
         } else {
-            vd.ban_field("progress_desc", || "progressbar = yes");
+            vd.ban_field("progress_desc", || "progressbar = yes or scripted_progress_bar");
         }
 
         vd.field_item("how_tutorial", Item::TutorialLesson);
@@ -277,6 +276,13 @@ impl DbKind for JournalEntry {
         vd.field_integer("active_update_frequency");
         vd.field_bool("should_update_on_player_command");
         vd.field_bool("display_progressbar_as_months");
+        if let Some(callback) = block.get_key("is_shown_in_lobby")
+            && sc_context == Scopes::None
+        {
+            // This callback is absent from the format guide. Contextless entries also
+            // have country callbacks, so the general JE root is only a working assumption.
+            sc.mark_root_inferred(callback);
+        }
         vd.field_trigger("is_shown_in_lobby", Tooltipped::No, &mut sc);
     }
 }
@@ -359,5 +365,9 @@ fn validate_effect_desc(block: &Block, data: &Everything, sc: &mut ScopeContext)
     vd.field_localization("header", sc);
     let mut display_sc = sc.clone();
     display_sc.set_effects_display_only(true);
+    if display_sc.scopes(data) == Scopes::None {
+        // Contextless outcomes render effects against a viewer that is unknown here.
+        display_sc.mark_root_inferred(&Token::new("event_outcome_effect_desc", block.loc));
+    }
     vd.field_effect("effect", Tooltipped::Yes, &mut display_sc);
 }

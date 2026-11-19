@@ -442,7 +442,12 @@ pub fn validate_effect_field(
             }
             Effect::Removed(version, explanation) => {
                 let msg = format!("`{key}` was removed in {version}");
-                warn(ErrorKey::Removed).msg(msg).info(explanation).loc(key).push();
+                warn(ErrorKey::Removed)
+                    .advisory_in_vic3()
+                    .msg(msg)
+                    .info(explanation)
+                    .loc(key)
+                    .push();
             }
             Effect::Unchecked => (),
             #[cfg(any(feature = "ck3", feature = "vic3", feature = "eu5", feature = "hoi4"))]
@@ -493,10 +498,49 @@ pub fn validate_effect_field(
 
     // skip this check for imperator because it has too many dynamic triggers that get
     // inappropriately matched.
-    if !Game::is_imperator() && scope_trigger(key, data).is_some() {
+    if !Game::is_imperator()
+        && (scope_trigger(key, data).is_some()
+            || (Game::is_vic3() && data.get_trigger(key).is_some()))
+    {
         let msg = format!("`{key}` is a trigger and can't be used as an effect");
         err(ErrorKey::WrongUse).msg(msg).loc(key).push();
         return false;
+    }
+
+    if Game::is_vic3() && key.lowercase_is("make_indepedent") {
+        let msg = format!("unknown effect `{key}`");
+        err(ErrorKey::UnknownField)
+            .msg(msg)
+            .info("Use make_independent = yes or no.")
+            .loc(key)
+            .push();
+        return false;
+    }
+
+    if Game::is_vic3() && (key.lowercase_is("add") || key.lowercase_is("multiply")) {
+        tips(ErrorKey::UnknownField)
+            .msg(format!("unknown effect `{key}`"))
+            .info("This operator is recognized in script values. Verify the operation and caller before changing its definition.")
+            .loc(key)
+            .push();
+        return false;
+    }
+
+    #[cfg(feature = "vic3")]
+    if Game::is_vic3()
+        && key.lowercase_is("last_name")
+        && sc.scopes(data) == Scopes::Character
+        && let BV::Block(block) = bv
+    {
+        tips(ErrorKey::UnknownField)
+            .msg("last_name as a Character scope link needs verification")
+            .info("The exported create_character last_name parameter does not establish a scope link.")
+            .loc(key)
+            .push();
+        sc.open_scope(Scopes::all_but_none(), key.clone());
+        has_tooltip |= validate_effect(block, data, sc, tooltipped);
+        sc.close();
+        return has_tooltip && tooltipped.is_tooltipped();
     }
 
     // Check if it's a target = { target_scope } block.

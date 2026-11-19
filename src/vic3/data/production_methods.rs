@@ -4,6 +4,7 @@ use crate::everything::Everything;
 use crate::game::GameFlags;
 use crate::item::{Item, ItemLoader};
 use crate::modif::validate_modifs;
+use crate::report::Severity;
 use crate::token::Token;
 use crate::validator::Validator;
 use crate::vic3::modif::ModifKinds;
@@ -28,7 +29,10 @@ impl DbKind for ProductionMethod {
 
         data.verify_exists(Item::Localization, key);
 
-        vd.field_item("texture", Item::File);
+        vd.field_validated_value("texture", |_, mut value| {
+            value.set_max_severity(Severity::Tips);
+            value.item(Item::File);
+        });
         vd.field_bool("is_default");
         vd.field_value("scoring_override");
         vd.field_bool("low_pop_method");
@@ -134,10 +138,15 @@ impl DbKind for ProductionMethodGroup {
         if !key.is("pmg_dummy") {
             vd.req_field("texture");
         }
-        vd.field_item("texture", Item::File);
+        vd.field_validated_value("texture", |_, mut value| {
+            value.set_max_severity(Severity::Tips);
+            value.item(Item::File);
+        });
         vd.field_bool("is_hidden_when_unavailable");
 
         vd.req_field("production_methods");
+        // This list selects the production methods from which one must be active.
+        // The game ships this contract in common/production_method_groups/production_method_groups.md.
         vd.multi_field_list_items("production_methods", Item::ProductionMethod);
 
         vd.field_choice("ai_selection", &["most_profitable", "most_productive"]);

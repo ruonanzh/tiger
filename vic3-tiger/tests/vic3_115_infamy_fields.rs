@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use tiger_lib::{Everything, Severity, take_reports};
+use tiger_lib::{Confidence, Everything, Severity, take_reports};
 
 #[test]
 fn validates_wargoal_infamy_calculations_in_both_parents() {
@@ -23,10 +23,15 @@ fn validates_wargoal_infamy_calculations_in_both_parents() {
             } else {
                 continue;
             };
+            if report.msg.starts_with("scope:")
+                && report.msg.ends_with("might not be available here")
+            {
+                assert_eq!(report.severity, Severity::Tips);
+                assert_eq!(report.confidence, Confidence::Weak);
+            }
             if parent.0 == "treaty article"
                 && report.msg == "scope:infamy_dynamic might not be available here"
             {
-                assert_eq!(report.severity, Severity::Warning);
                 assert_eq!(pointers.len(), 2, "{pointers:#?}");
                 let source = &pointers[1].loc;
                 assert_eq!((source.pathname(), source.line, source.column), (path, 3, 5));
@@ -43,14 +48,12 @@ fn validates_wargoal_infamy_calculations_in_both_parents() {
         }
     }
 
-    for (parent, scope_severity) in
-        [("war goal", Severity::Error), ("treaty article", Severity::Warning)]
-    {
+    for parent in ["war goal", "treaty article"] {
         assert!(
             diagnostics.contains(&(
                 parent,
                 5,
-                scope_severity,
+                Severity::Tips,
                 "scope:infamy_dynamic might not be available here",
             )),
             "{diagnostics:#?}"
@@ -59,7 +62,7 @@ fn validates_wargoal_infamy_calculations_in_both_parents() {
             diagnostics.contains(&(
                 parent,
                 7,
-                scope_severity,
+                Severity::Tips,
                 "scope:infamy_other might not be available here",
             )),
             "{diagnostics:#?}"
@@ -80,7 +83,7 @@ fn validates_wargoal_infamy_calculations_in_both_parents() {
         diagnostics.contains(&(
             "treaty article",
             2,
-            Severity::Warning,
+            Severity::Tips,
             "scope:own_market_goods might not be available here",
         )),
         "{diagnostics:#?}"

@@ -5,7 +5,7 @@ use bitflags::bitflags;
 use crate::vic3::tables::modifs::modif_flow_suggest;
 use crate::{
     Severity, Token, context, modif,
-    report::{ErrorKey, report},
+    report::{ErrorKey, report, tips},
     scopes::Scopes,
     vic3::tables::modifs::{MODIF_FLOW_MAP, lookup_modif},
 };
@@ -61,9 +61,9 @@ impl ModifKinds {
             } else {
                 self.to_string()
             };
-            let needs_verification = !self.is_empty()
-                && (other.intersects(Self::Ship)
-                    || (self.intersects(Self::Building) && other.intersects(Self::Unit)));
+            // The masks identify destinations. An absent path in Tiger's table does not
+            // establish a runtime propagation restriction.
+            let needs_verification = !self.is_empty();
             let msg = if needs_verification {
                 format!(
                     "`{token}` is a modifier for {other}; propagation from {from} needs verification"
@@ -71,17 +71,18 @@ impl ModifKinds {
             } else {
                 format!("`{token}` is a modifier for {other} and will not flow from {from}")
             };
-            let info = if needs_verification {
-                "Tiger's known modifier flow has no matching path. Verify the application point and target.".to_string()
-            } else if self.is_empty() {
+            let info = if self.is_empty() {
                 format!("there are no valid modifiers for {from}")
             } else if let Some(suggest) = modif_flow_suggest(token.as_str(), valid_kinds) {
-                format!("a similar modifier exists that would flow `{suggest}`")
+                format!("Tiger knows a propagation route for the similar modifier `{suggest}`")
             } else {
-                format!("valid modifiers are for {valid_kinds}")
+                "Tiger's known modifier flow has no matching path. Verify the application point and target.".to_string()
             };
-            let diagnostic = report(ErrorKey::Modifiers, sev);
-            let diagnostic = if needs_verification { diagnostic.weak() } else { diagnostic };
+            let diagnostic = if needs_verification {
+                tips(ErrorKey::Modifiers).weak()
+            } else {
+                report(ErrorKey::Modifiers, sev)
+            };
             let mut report = diagnostic
                 .msg(msg)
                 .info(info)

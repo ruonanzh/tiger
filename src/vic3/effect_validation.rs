@@ -11,7 +11,8 @@ use crate::token::Token;
 use crate::tooltipped::Tooltipped;
 use crate::trigger::validate_target;
 use crate::validate::{
-    validate_color, validate_identifier, validate_optional_duration, validate_possibly_named_color,
+    validate_color, validate_duration, validate_identifier, validate_optional_duration,
+    validate_possibly_named_color,
 };
 use crate::validator::{Validator, ValueValidator};
 use crate::vic3::data::buildings::BuildingType;
@@ -319,7 +320,8 @@ pub fn validate_create_building(
     let building = block.get_field_value("building");
     vd.field_validated_list("activate_production_methods", |token, data| {
         data.verify_exists(Item::ProductionMethod, token);
-        if let Some(building) = building
+        if data.item_exists(Item::ProductionMethod, token.as_str())
+            && let Some(building) = building
             && let Some((_, block, building_item)) =
                 data.get_item::<BuildingType>(Item::BuildingType, building.as_str())
         {
@@ -447,6 +449,12 @@ pub fn validate_create_character(
                 vd.req_tokens_integers_exactly(2);
             }
         }
+    });
+    vd.field_validated_key("has_role", |key, _, _| {
+        crate::report::err(ErrorKey::WrongUse)
+            .msg("has_role is a trigger and cannot be used as a create_character parameter")
+            .loc(key)
+            .push();
     });
     vd.field_item_or_target("ideology", sc, Item::Ideology, Scopes::Ideology);
     vd.field_item_or_target("holding_type", sc, Item::BuildingType, Scopes::BuildingType);
@@ -629,7 +637,7 @@ pub fn validate_create_military_formation(
     vd.field_choice("type", &["army", "fleet"]);
     let is_fleet = block.field_value_is("type", "fleet");
     vd.field_target("hq_region", sc, Scopes::StrategicRegion);
-    vd.field_target("supply_hub", sc, Scopes::State);
+    vd.field_target("supply_hub", sc, Scopes::State.union(Scopes::StateRegion));
     vd.multi_field_validated_block("combat_unit", |block, data| {
         let mut vd = Validator::new(block, data);
         vd.field_target("type", sc, Scopes::CombatUnitType);
@@ -673,7 +681,7 @@ pub fn validate_create_pop(
     _key: &Token,
     block: &Block,
     _data: &Everything,
-    _sc: &mut ScopeContext,
+    sc: &mut ScopeContext,
     mut vd: Validator,
     _tooltipped: Tooltipped,
 ) {
@@ -692,7 +700,20 @@ pub fn validate_create_pop(
     }
 
     vd.field_item("pop_type", Item::PopType);
-    vd.field_integer("size");
+    vd.field_validated_key("size", |key, bv, data| match bv {
+        BV::Value(value) => {
+            value.expect_integer();
+        }
+        BV::Block(_) => {
+            tips(ErrorKey::Validation)
+                .weak()
+                .msg("create_pop size uses an inline script value")
+                .info("A bundled effect uses this form. Verify the size calculation in game.")
+                .loc(key)
+                .push();
+            validate_script_value(bv, data, sc);
+        }
+    });
 
     let mut available_cultures = TigerHashSet::default();
 
@@ -787,6 +808,7 @@ pub fn validate_create_state(
 
     vd.field_target("country", sc, Scopes::Country);
     vd.field_list_items("owned_provinces", Item::Province);
+    vd.uncertain_field("prime_land");
     vd.field_choice("state_type", STATE_TYPES);
 }
 
@@ -1373,7 +1395,9 @@ pub fn validate_temporary_hostilities(
     vd.req_field("country");
     vd.field_target("country", sc, Scopes::Country);
     vd.field_choice("type", &["naval", "war", "limited_war"]);
-    if key.as_str().starts_with("enable_") {
+    if key.lowercase_is("enable_temporary_hostilities")
+        && !vd.field_validated_block_sc("duration", sc, validate_duration)
+    {
         validate_optional_duration(&mut vd, sc);
     }
 }

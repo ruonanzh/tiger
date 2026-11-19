@@ -4,7 +4,6 @@ use crate::data::localization::LocaValue;
 use crate::datacontext::DataContext;
 use crate::datatype::{CodeArg, Datatype, validate_datatypes};
 use crate::everything::Everything;
-#[cfg(feature = "ck3")]
 use crate::game::Game;
 use crate::game::GameFlags;
 use crate::gui::properties::{ALIGN, BLENDMODES};
@@ -12,6 +11,7 @@ use crate::gui::{GuiCategories, GuiValidation, PropertyContainer, WidgetProperty
 use crate::helpers::stringify_choices;
 use crate::item::Item;
 use crate::parse::localization::ValueParser;
+use crate::parse::pdxfile::is_editor_reader_reference;
 use crate::report::{ErrorKey, Severity, err, warn};
 use crate::scopes::Scopes;
 use crate::token::Token;
@@ -153,10 +153,8 @@ pub fn validate_property(
                 if value.starts_with("[") {
                     // TODO: need a way to express it can be int32 or float
                     validate_datatype_field(Datatype::Unknown, key, bv, data, dc, false);
-                } else if let Some(value) = value.strip_suffix("%") {
-                    value.expect_number();
-                } else {
-                    value.expect_number();
+                } else if !is_editor_reader_reference(value) {
+                    validate_gui_number_or_percent(value);
                 }
             }
         }
@@ -166,10 +164,8 @@ pub fn validate_property(
             }
             BV::Block(block) => {
                 for value in block.iter_values_warn() {
-                    if let Some(value) = value.strip_suffix("%") {
-                        value.expect_number();
-                    } else {
-                        value.expect_number();
+                    if !is_editor_reader_reference(value) {
+                        validate_gui_number_or_percent(value);
                     }
                 }
             }
@@ -255,6 +251,15 @@ pub fn validate_property(
                 if value.starts_with("[") {
                     // TODO: need some way of specifying "stringable" datatypes
                     validate_datatype_field(Datatype::Unknown, key, bv, data, dc, false);
+                } else if Game::is_vic3()
+                    && ((itype == Item::Font
+                        && matches!(
+                            key.loc.kind,
+                            crate::fileset::FileKind::Clausewitz | crate::fileset::FileKind::Jomini
+                        ))
+                        || key.lowercase_is("grid_entity_name"))
+                {
+                    data.verify_exists_max_sev(itype, value, Severity::Tips);
                 } else {
                     data.verify_exists(itype, value);
                 }
@@ -359,7 +364,11 @@ pub fn validate_property(
                 let mut count = 0;
                 for value in block.iter_values_warn() {
                     count += 1;
-                    data.verify_exists(Item::TextFormat, value);
+                    if Game::is_vic3() && key.loc.pathname().starts_with("gui/frontend") {
+                        data.verify_exists_max_sev(Item::TextFormat, value, Severity::Tips);
+                    } else {
+                        data.verify_exists(Item::TextFormat, value);
+                    }
                     if count == 3 {
                         let msg = "expected exactly 2 text formats";
                         warn(ErrorKey::Validation).msg(msg).loc(value).push();
@@ -377,6 +386,17 @@ pub fn validate_property(
                 }
             }
         }
+    }
+}
+
+fn validate_gui_number_or_percent(value: &Token) {
+    if Game::is_vic3()
+        && let Some(percent) = value.strip_suffix("%")
+    {
+        // GUI percentage positions and sizes use a floating-point layout value.
+        percent.expect_precise_number();
+    } else {
+        value.strip_suffix("%").as_ref().unwrap_or(value).expect_number();
     }
 }
 

@@ -6,11 +6,11 @@ use crate::db::{Db, DbKind};
 use crate::everything::Everything;
 use crate::fileset::{FileEntry, FileHandler};
 use crate::game::{Game, GameFlags};
-use crate::helpers::{TigerHashMap, dup_error, exact_dup_advice};
+use crate::helpers::{TigerHashMap, dup_overlay, exact_dup_advice};
 use crate::item::{Item, ItemLoader, LoadAsFile, Recursive};
 use crate::parse::ParserMemory;
 use crate::pdxfile::{PdxEncoding, PdxFile};
-use crate::report::{ErrorKey, Severity, untidy, warn};
+use crate::report::{ErrorKey, Severity, tips, untidy, warn};
 use crate::scopes::Scopes;
 use crate::token::Token;
 use crate::tooltipped::Tooltipped;
@@ -37,7 +37,7 @@ impl Coas {
                         if otherblock.equivalent(block) {
                             exact_dup_advice(key, &other.key, "coa template");
                         } else {
-                            dup_error(key, &other.key, "coa template");
+                            dup_overlay(key, &other.key, "coat of arms template");
                         }
                     }
                     self.templates.insert(
@@ -53,7 +53,7 @@ impl Coas {
                 if other.bv.equivalent(bv) {
                     exact_dup_advice(key, &other.key, "coat of arms");
                 } else {
-                    dup_error(key, &other.key, "coat of arms");
+                    dup_overlay(key, &other.key, "coat of arms");
                 }
             }
             self.coas.insert(key.as_str(), Coa::new(key.clone(), bv.clone()));
@@ -210,6 +210,12 @@ pub fn validate_coa_layout(block: &Block, data: &Everything) {
                 data.verify_exists_implied(Item::File, &pathname, token);
             }
         }
+        #[cfg(feature = "vic3")]
+        if Game::is_vic3() {
+            for field in ["color1", "color2", "color3", "color4", "color5"] {
+                vd.uncertain_field(field);
+            }
+        }
         vd.multi_field_validated_block("instance", validate_instance);
     });
 
@@ -243,7 +249,14 @@ fn validate_coa_color(bv: &BV, block: Option<&Block>, data: &Everything) {
                 if let Some(block) = block {
                     if !block.has_key(color.as_str()) {
                         let msg = format!("setting to {color} but {color} is not defined");
-                        warn(ErrorKey::Colors).msg(msg).loc(color).push();
+                        if Game::is_vic3() {
+                            tips(ErrorKey::Colors)
+                                .msg(format!("{msg} in the local block"))
+                                .loc(color)
+                                .push();
+                        } else {
+                            warn(ErrorKey::Colors).msg(msg).loc(color).push();
+                        }
                     }
                 } else {
                     let msg = format!("setting to {color} only works in an emblem");
@@ -457,7 +470,7 @@ impl DbKind for CoaDynamicDefinition {
 fn validate_instance(block: &Block, data: &Everything) {
     let mut vd = Validator::new(block, data);
     vd.set_max_severity(Severity::Warning);
-    vd.field_list_precise_numeric_exactly("position", 2);
+    vd.field_validated_block("position", validate_coa_coordinate);
     vd.field_validated_block("scale", validate_scale);
     vd.field_precise_numeric("rotation");
     vd.field_precise_numeric("depth");
@@ -469,11 +482,28 @@ fn validate_instance(block: &Block, data: &Everything) {
 fn validate_instance_offset(block: &Block, data: &Everything) {
     let mut vd = Validator::new(block, data);
     vd.set_max_severity(Severity::Warning);
-    vd.field_list_precise_numeric_exactly("offset", 2);
+    vd.field_validated_block("offset", validate_coa_coordinate);
     vd.field_validated_block("scale", validate_scale);
     vd.field_precise_numeric("rotation");
     vd.field_precise_numeric("depth");
     vd.ban_field("position", || "colored and textured emblems");
+}
+
+fn validate_coa_coordinate(block: &Block, data: &Everything) {
+    let mut vd = Validator::new(block, data);
+    if Game::is_vic3()
+        && let [token] = vd.values().as_slice()
+        && token.is_inline_calculation()
+        && token.expect_precise_number().is_some()
+    {
+        crate::report::tips(ErrorKey::Validation)
+            .msg("coat of arms coordinate has one result after inline calculation")
+            .info("Check whether the game expects both components at this coordinate.")
+            .loc(*token)
+            .push();
+    } else {
+        vd.req_tokens_precise_numbers_exactly(2);
+    }
 }
 
 fn validate_scale(block: &Block, data: &Everything) {

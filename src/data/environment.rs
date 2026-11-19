@@ -65,8 +65,15 @@ impl DbKind for PortraitEnvironment {
                             vd.field_precise_numeric("radius");
                             vd.field_precise_numeric("falloff");
                         } else {
-                            vd.ban_field("radius", || "spot_light or point_light");
-                            vd.ban_field("falloff", || "spot_light or point_light");
+                            if Game::is_vic3() {
+                                // Vanilla specifies these on directional lights as well.
+                                // Validate the numbers without assuming that the engine rejects them.
+                                vd.field_precise_numeric("radius");
+                                vd.field_precise_numeric("falloff");
+                            } else {
+                                vd.ban_field("radius", || "spot_light or point_light");
+                                vd.ban_field("falloff", || "spot_light or point_light");
+                            }
                         }
                         if block.field_value_is("type", "point_light") {
                             vd.field_precise_numeric("outer_cone_angle");

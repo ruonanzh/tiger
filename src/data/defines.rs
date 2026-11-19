@@ -106,7 +106,16 @@ impl Define {
 
         // TODO: save key instead of reconstructing it here?
         let key = format!("{}|{}", &self.group, &self.name);
-        if let Some(dt) = defines_map.get(&*key) {
+        if Game::is_vic3()
+            && matches!(
+                key.as_str(),
+                "NJominiIcons|SHARED_ICON_DEFAULT_PATH" | "NJominiIcons|SHARED_ICON_INVALID_PATH"
+            )
+        {
+            if let Some(token) = self.bv.expect_value() {
+                data.verify_exists_max_sev(crate::item::Item::File, token, crate::Severity::Tips);
+            }
+        } else if let Some(dt) = defines_map.get(&*key) {
             dt.validate(&self.bv, data);
         } else {
             let msg = format!("unknown define {key}");

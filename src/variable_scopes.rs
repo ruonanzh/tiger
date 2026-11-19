@@ -1,6 +1,7 @@
 use scc::HashMap as SccHashMap;
 
-use crate::report::{ErrorKey, warn};
+use crate::game::Game;
+use crate::report::{ErrorKey, tips, warn};
 use crate::scopes::Scopes;
 use crate::token::Token;
 
@@ -30,6 +31,10 @@ impl VariableScopes {
         self.scopes.read_sync(name, |_, (s, _)| *s).unwrap_or(Scopes::all())
     }
 
+    pub fn is_configured(&self, name: &str) -> bool {
+        self.scopes.read_sync(name, |_, (_, configured)| *configured).unwrap_or(false)
+    }
+
     pub fn expect(&self, name: &'static str, token: &Token, scopes: Scopes) {
         self.scopes
             .entry_sync(name)
@@ -44,7 +49,12 @@ impl VariableScopes {
                         "{}{name} was {verb} to be {s} but scope seems to be {scopes}",
                         self.namespace
                     );
-                    warn(ErrorKey::Scopes).weak().msg(msg).loc(token).push();
+                    let diagnostic = if Game::is_vic3() && !*overridden {
+                        tips(ErrorKey::Scopes)
+                    } else {
+                        warn(ErrorKey::Scopes)
+                    };
+                    diagnostic.weak().msg(msg).loc(token).push();
                 }
             })
             .or_insert((scopes, false));

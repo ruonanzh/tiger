@@ -1,7 +1,7 @@
 use std::fs;
 use std::path::Path;
 
-use tiger_lib::{Everything, Game, take_reports};
+use tiger_lib::{Everything, Game, Severity, take_reports};
 
 #[test]
 fn validates_vic3_localization_expressions() {
@@ -37,6 +37,9 @@ fn validates_vic3_localization_expressions() {
         for pointers in occurrences {
             let loc = pointers[0].loc;
             if loc.pathname() == relative_path {
+                if loc.line == 11 {
+                    assert_eq!(report.severity, Severity::Tips);
+                }
                 observed.push((loc.line, report.msg.as_str()));
             }
         }
@@ -50,7 +53,10 @@ fn validates_vic3_localization_expressions() {
         (8, "unterminated argument string"),
         (9, "unknown datafunction GetStrng"),
         (10, "didn't recognize a key between $"),
-        (11, "The substitution parameter $MISSING_PROBE_KEY$ is not defined anywhere as a key."),
+        (
+            11,
+            "The substitution parameter $MISSING_PROBE_KEY$ was not found as a key in the indexed language.",
+        ),
         (12, "GetMoraleColorString takes 1 arguments but was given 0 here"),
         (13, "#markup should be followed by a space"),
     ] {

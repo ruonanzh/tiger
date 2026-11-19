@@ -44,6 +44,7 @@ impl DbKind for Technology {
         });
 
         vd.multi_field_list_items("unlocking_technologies", Item::Technology);
+        vd.uncertain_field("unlocking_laws");
 
         vd.field_effect_rooted("on_researched", Tooltipped::No, Scopes::Country);
         vd.field_script_value_rooted("ai_weight", Scopes::Country);

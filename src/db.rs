@@ -21,9 +21,14 @@ use crate::item::Item;
 use crate::item::ItemExt;
 use crate::lowercase::Lowercase;
 #[cfg(any(feature = "vic3", feature = "eu5"))]
-use crate::report::{ErrorKey, err};
+use crate::report::{ErrorKey, Severity, err, report};
 use crate::token::Token;
 use crate::variables::Variables;
+
+#[cfg(any(feature = "vic3", feature = "eu5"))]
+fn inferred_prefix_severity() -> Severity {
+    if Game::is_vic3() { Severity::Tips } else { Severity::Error }
+}
 
 pub type FlagValidator = fn(&Token, &Everything);
 
@@ -81,9 +86,25 @@ impl Db {
         if Game::is_vic3() || Game::is_eu5() {
             #[cfg(any(feature = "vic3", feature = "eu5"))]
             if let Some((prefix, name)) = key.split_once(':') {
-                if !item.injectable() {
+                if !item.injectable() && !Game::is_vic3() {
                     let msg = format!("cannot use prefixes with {item}");
-                    err(ErrorKey::Prefixes).msg(msg).loc(key).push();
+                    report(ErrorKey::Prefixes, inferred_prefix_severity()).msg(msg).loc(key).push();
+                    return;
+                }
+                if Game::is_vic3()
+                    && !item.injectable()
+                    && matches!(
+                        prefix.as_str(),
+                        "INJECT"
+                            | "REPLACE"
+                            | "TRY_INJECT"
+                            | "TRY_REPLACE"
+                            | "REPLACE_OR_CREATE"
+                            | "INJECT_OR_CREATE"
+                    )
+                {
+                    let msg = format!("cannot confirm prefix support for {item}");
+                    report(ErrorKey::Prefixes, Severity::Tips).msg(msg).loc(key).push();
                     return;
                 }
                 match prefix.as_str() {
@@ -92,7 +113,10 @@ impl Db {
                             other.inject(block, kind);
                         } else {
                             let msg = "injecting into a non-existing item";
-                            err(ErrorKey::Prefixes).msg(msg).loc(name).push();
+                            report(ErrorKey::Prefixes, inferred_prefix_severity())
+                                .msg(msg)
+                                .loc(name)
+                                .push();
                         }
                     }
                     "REPLACE" => {
@@ -100,7 +124,10 @@ impl Db {
                             self.add_inner2(item, name, block, kind);
                         } else {
                             let msg = "replacing a non-existing item";
-                            err(ErrorKey::Prefixes).msg(msg).loc(name).push();
+                            report(ErrorKey::Prefixes, inferred_prefix_severity())
+                                .msg(msg)
+                                .loc(name)
+                                .push();
                         }
                     }
                     "TRY_INJECT" => {
@@ -134,7 +161,7 @@ impl Db {
                     if let Some(other) = self.database[item as usize].get(key.as_str()) {
                         let msg =
                             format!("must have a prefix such as `REPLACE:` to replace {item}");
-                        err(ErrorKey::Prefixes)
+                        report(ErrorKey::Prefixes, inferred_prefix_severity())
                             .msg(msg)
                             .loc(key)
                             .loc_msg(&other.key, "original here")

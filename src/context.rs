@@ -6,7 +6,7 @@ use std::thread::panicking;
 use crate::everything::Everything;
 use crate::game::Game;
 use crate::helpers::{ActionOrEvent, TigerHashMap, stringify_choices};
-use crate::report::{ErrorKey, ReportBuilderFull, err, warn};
+use crate::report::{ErrorKey, ReportBuilderFull, ReportBuilderStage1, err, tips, warn};
 use crate::scopes::Scopes;
 use crate::token::Token;
 
@@ -70,9 +70,6 @@ pub struct ScopeContext {
     /// If `strict_scopes` is false, then the `ScopeContext` will assume any name might be a valid
     /// scope name that we just don't know about yet.
     strict_scopes: bool,
-    /// Named scopes can come from conditional saves and external callers of a Victoria 3 JE.
-    #[cfg(feature = "vic3")]
-    review_missing_scopes: bool,
 
     /// Effects in this context only generate descriptions and are never executed.
     effects_display_only: bool,
@@ -157,6 +154,8 @@ pub enum Reason {
     /// The scope type was deduced from a named scope's name; the `Token` points at that name in
     /// the script.
     Name(Token),
+    /// The named scope's type is inferred from use without a proven source.
+    InferredScope(Token),
     /// The scope was supplied by the game engine. The `Token` points at a key explaining this, for
     /// example the key of an `Item` or the field key of a trigger or effect in an item.
     Builtin(Token),
@@ -166,7 +165,7 @@ pub enum Reason {
     MultiplierBug(Token),
     /// The scope type was taken from info about a variable or variable list in the given namespace.
     #[cfg(feature = "jomini")]
-    VariableReference(Token, &'static str),
+    VariableReference(Token, &'static str, &'static str),
 }
 
 /// Information about a temporarily suspended scope-building operation.
@@ -184,8 +183,6 @@ pub struct StashedBuilder {
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Signature {
     root: Scopes,
-    #[cfg(feature = "vic3")]
-    review_missing_scopes: bool,
     effects_display_only: bool,
     // these are all sorted
     scope_names: Vec<(&'static str, Scopes)>,
@@ -209,12 +206,42 @@ const PREV: usize = 2;
 impl Reason {
     pub fn token(&self) -> &Token {
         match self {
-            Reason::Token(t) | Reason::Name(t) | Reason::Builtin(t) => t,
+            Reason::Token(t) | Reason::Name(t) | Reason::InferredScope(t) | Reason::Builtin(t) => t,
             #[cfg(feature = "vic3")]
             Reason::MultiplierBug(t) => t,
             #[cfg(feature = "jomini")]
-            Reason::VariableReference(t, _) => t,
+            Reason::VariableReference(t, _, _) => t,
         }
+    }
+
+    pub(crate) fn scope_diagnostic(&self, data: &Everything) -> ReportBuilderStage1 {
+        if self.is_runtime_inferred(data) {
+            tips(ErrorKey::Scopes).weak()
+        } else {
+            warn(ErrorKey::Scopes)
+        }
+    }
+
+    #[allow(unused_variables)]
+    pub(crate) fn is_runtime_inferred(&self, data: &Everything) -> bool {
+        Game::is_vic3()
+            && match self {
+                Reason::Name(_) | Reason::InferredScope(_) => true,
+                #[cfg(feature = "vic3")]
+                Reason::MultiplierBug(_) => true,
+                #[cfg(feature = "jomini")]
+                Reason::VariableReference(_, namespace, name) => {
+                    let registry = match *namespace {
+                        "var:" => &data.variable_scopes,
+                        "global_var:" => &data.global_scopes,
+                        "global list " => &data.global_list_scopes,
+                        "variable list " => &data.variable_list_scopes,
+                        _ => return false,
+                    };
+                    !registry.is_configured(name)
+                }
+                _ => false,
+            }
     }
 
     // TODO: change this to Display ?
@@ -222,13 +249,14 @@ impl Reason {
         match self {
             Reason::Token(t) => Cow::Owned(format!("deduced from `{t}` here")),
             Reason::Name(_) => Cow::Borrowed("deduced from the scope's name"),
+            Reason::InferredScope(t) => Cow::Owned(format!("inferred from `{t}` here")),
             Reason::Builtin(_) => Cow::Borrowed("supplied by the game engine"),
             #[cfg(feature = "vic3")]
             Reason::MultiplierBug(_) => {
                 Cow::Borrowed("evaluated in root scope for `multiplier` (as of 1.9.8")
             }
             #[cfg(feature = "jomini")]
-            Reason::VariableReference(t, namespace) => {
+            Reason::VariableReference(t, namespace, _) => {
                 Cow::Owned(format!("based on {namespace}{t}"))
             }
         }
@@ -240,6 +268,8 @@ impl ScopeEntry {
         let token = token.into();
         if let Some(scopes) = scope_type_from_name(token.as_str()) {
             ScopeEntry::Scope(scopes, Reason::Name(token))
+        } else if Game::is_vic3() {
+            ScopeEntry::Scope(Scopes::all(), Reason::InferredScope(token))
         } else {
             ScopeEntry::Scope(Scopes::all(), Reason::Token(token))
         }
@@ -266,12 +296,25 @@ impl ScopeContext {
             is_unrooted: false,
             prev_levels: 0,
             strict_scopes: true,
-            #[cfg(feature = "vic3")]
-            review_missing_scopes: false,
             effects_display_only: false,
             no_warn: false,
             source: token,
             traceback: Vec::new(),
+        }
+    }
+
+    /// Root suggested by the available script evidence, whose runtime contract is unresolved.
+    #[cfg(feature = "vic3")]
+    pub(crate) fn new_inferred_root(scopes: Scopes, token: &Token) -> Self {
+        let mut sc = Self::new(scopes, token);
+        sc.mark_root_inferred(token);
+        sc
+    }
+
+    #[cfg(feature = "vic3")]
+    pub(crate) fn mark_root_inferred(&mut self, token: &Token) {
+        if let ScopeEntry::Scope(_, reason) = &mut self.root {
+            *reason = Reason::InferredScope(token.clone());
         }
     }
 
@@ -297,8 +340,6 @@ impl ScopeContext {
             is_unrooted: true,
             prev_levels: 0,
             strict_scopes: true,
-            #[cfg(feature = "vic3")]
-            review_missing_scopes: false,
             effects_display_only: false,
             no_warn: false,
             source: token,
@@ -328,11 +369,6 @@ impl ScopeContext {
             .insert(sc.scope_stack.len() - 1, ScopeEntry::Scope(prev, Reason::Token(token)));
         sc.prev_levels += 1;
         sc
-    }
-
-    #[cfg(feature = "vic3")]
-    pub fn advise_on_missing_saved_scopes(&mut self) {
-        self.review_missing_scopes = true;
     }
 
     pub fn set_effects_display_only(&mut self, display_only: bool) {
@@ -390,15 +426,13 @@ impl ScopeContext {
         new_sc.root = ScopeEntry::Scope(scopes, reason.clone());
         #[cfg(feature = "vic3")]
         if Game::is_vic3()
-            && !self.effects_display_only
-            && scopes == Scopes::None
-            && matches!(self.resolve_backrefs(THIS), ScopeEntry::Scope(..) | ScopeEntry::Rootref)
             && let ActionOrEvent::Event(id, ..) = &trace
-            && let Some(event_type) = data.events.declared_country_scope(id.as_str())
+            && let Some((declared, event_type)) = data.events.declared_scope(id.as_str())
+            && (!scopes.intersects(declared) || self.effects_display_only)
         {
-            // The caller already reported this mismatch. Check the body with its declared root
+            // The caller checks its own contract. Walk the event under its declared root
             // while preserving the names inherited from the caller.
-            new_sc.root = ScopeEntry::Scope(Scopes::Country, Reason::Builtin(event_type.clone()));
+            new_sc.root = ScopeEntry::Scope(declared, Reason::Builtin(event_type.clone()));
         }
         new_sc.scope_stack = vec![ScopeEntry::Rootref];
         new_sc.prev_levels = 0;
@@ -832,8 +866,6 @@ impl ScopeContext {
 
         Signature {
             root,
-            #[cfg(feature = "vic3")]
-            review_missing_scopes: self.review_missing_scopes,
             effects_display_only: self.effects_display_only,
             scope_names: process_scope_names(self, &self.scope_names, data),
             scope_list_names: process_scope_names(self, &self.scope_list_names, data),
@@ -903,8 +935,9 @@ impl ScopeContext {
     ///
     /// This is used when a scope chain starts with `scope:name`. The `token` is expected to be the
     /// `scope:name` token.
-    pub fn replace_named_scope(&mut self, name: &'static str, token: &Token) {
-        *self.scope_stack.last_mut().unwrap() = ScopeEntry::Named(self.named_index(name, token));
+    pub fn replace_named_scope(&mut self, name: &'static str, token: &Token, guarded: bool) {
+        *self.scope_stack.last_mut().unwrap() =
+            ScopeEntry::Named(self.named_index(name, token, guarded));
     }
 
     /// Replace the `this` in a temporary scope level with a reference to the local variable `name`.
@@ -921,8 +954,10 @@ impl ScopeContext {
     /// `global_var:name` token.
     #[cfg(feature = "jomini")]
     pub fn replace_global_variable(&mut self, name: &'static str, token: &Token) {
-        *self.scope_stack.last_mut().unwrap() =
-            ScopeEntry::GlobalVar(name, Reason::VariableReference(token.clone(), "global_var:"));
+        *self.scope_stack.last_mut().unwrap() = ScopeEntry::GlobalVar(
+            name,
+            Reason::VariableReference(token.clone(), "global_var:", name),
+        );
     }
 
     /// Replace the `this` in a temporary scope level with a reference to the variable `name`.
@@ -932,7 +967,7 @@ impl ScopeContext {
     #[cfg(feature = "jomini")]
     pub fn replace_variable(&mut self, name: &'static str, token: &Token) {
         *self.scope_stack.last_mut().unwrap() =
-            ScopeEntry::Var(name, Reason::VariableReference(token.clone(), "var:"));
+            ScopeEntry::Var(name, Reason::VariableReference(token.clone(), "var:", name));
     }
 
     /// Replace the `this` in a temporary scope level with a reference to the scope type of the
@@ -957,7 +992,7 @@ impl ScopeContext {
     pub fn replace_global_list_entry(&mut self, name: &Token) {
         *self.scope_stack.last_mut().unwrap() = ScopeEntry::GlobalList(
             name.as_str(),
-            Reason::VariableReference(name.clone(), "global list "),
+            Reason::VariableReference(name.clone(), "global list ", name.as_str()),
         );
     }
 
@@ -967,7 +1002,7 @@ impl ScopeContext {
     pub fn replace_variable_list_entry(&mut self, name: &Token) {
         *self.scope_stack.last_mut().unwrap() = ScopeEntry::VarList(
             name.as_str(),
-            Reason::VariableReference(name.clone(), "variable list "),
+            Reason::VariableReference(name.clone(), "variable list ", name.as_str()),
         );
     }
 
@@ -975,11 +1010,19 @@ impl ScopeContext {
     ///
     /// If a new index has to be created, and `strict_scopes` is on, then a warning will be emitted.
     #[doc(hidden)]
-    fn named_index(&mut self, name: &'static str, token: &Token) -> usize {
+    fn named_index(&mut self, name: &'static str, token: &Token, guarded: bool) -> usize {
         if let Some(&(idx, t)) = self.scope_names.get(name) {
             if t == Temporary::Wiped {
                 let msg = format!("`scope:{name}` was temporary and is no longer available here");
-                self.log_traceback(err(ErrorKey::TemporaryScope).weak().msg(msg).loc(token)).push();
+                let diagnostic = if Game::is_vic3() && guarded {
+                    tips(ErrorKey::TemporaryScope)
+                        .weak()
+                        .msg(msg)
+                        .info("`?=` skips the read if the scope is absent")
+                } else {
+                    err(ErrorKey::TemporaryScope).weak().msg(msg)
+                };
+                self.log_traceback(diagnostic.loc(token)).push();
             }
             idx
         } else {
@@ -988,13 +1031,7 @@ impl ScopeContext {
             if self.strict_scopes {
                 if !self.no_warn {
                     let msg = format!("scope:{name} might not be available here");
-                    let diagnostic = err(ErrorKey::StrictScopes);
-                    #[cfg(feature = "vic3")]
-                    let diagnostic = if self.review_missing_scopes {
-                        warn(ErrorKey::StrictScopes)
-                    } else {
-                        diagnostic
-                    };
+                    let diagnostic = missing_saved_scope(err(ErrorKey::StrictScopes));
                     let mut builder = diagnostic.weak().msg(msg);
                     if self.scope_names.len() <= MAX_SCOPE_NAME_LIST && !self.scope_names.is_empty()
                     {
@@ -1136,7 +1173,6 @@ impl ScopeContext {
         let scopes = self.resolve_root().0;
         let mut sc = ScopeContext::new(scopes, key);
         sc.root = ScopeEntry::Scope(scopes, Reason::MultiplierBug(key.clone()));
-        sc.review_missing_scopes = self.review_missing_scopes;
         // The engine preserves the journal entry supplied to a JE when evaluating its modifier.
         if let Some(&(idx, Temporary::No)) = self.scope_names.get("journal_entry")
             && let ScopeEntry::Scope(scopes, Reason::Builtin(origin)) = &self.named[idx]
@@ -1291,13 +1327,19 @@ impl ScopeContext {
                     // if s is narrowed by the scopes info, remember why
                     if (*s & scopes) != *s {
                         *s &= scopes;
-                        *r = reason.clone();
+                        *r = if Game::is_vic3()
+                            && matches!(r, Reason::Name(_) | Reason::InferredScope(_))
+                        {
+                            Reason::InferredScope(reason.token().clone())
+                        } else {
+                            reason.clone()
+                        };
                     }
                 } else {
                     let token = reason.token();
                     let msg = format!("`{token}` is for {scopes} but scope seems to be {s}");
                     let msg2 = format!("scope was {}", r.msg());
-                    warn(ErrorKey::Scopes).msg(msg).loc(token).loc_msg(r.token(), msg2).push();
+                    r.scope_diagnostic(data).msg(msg).loc(token).loc_msg(r.token(), msg2).push();
                 }
             }
             #[cfg(feature = "jomini")]
@@ -1336,7 +1378,13 @@ impl ScopeContext {
                     // if s is narrowed by the scopes info, remember its token
                     if (*s & scopes) != *s {
                         *s &= scopes;
-                        *r = reason.clone();
+                        *r = if Game::is_vic3()
+                            && matches!(r, Reason::Name(_) | Reason::InferredScope(_))
+                        {
+                            Reason::InferredScope(reason.token().clone())
+                        } else {
+                            reason.clone()
+                        };
                     }
                 } else {
                     let msg = format!(
@@ -1344,7 +1392,12 @@ impl ScopeContext {
                     );
                     let msg2 = format!("expected {report} was {}", reason.msg());
                     let msg3 = format!("actual {report} was {}", r.msg());
-                    warn(ErrorKey::Scopes)
+                    let diagnostic = if reason.is_runtime_inferred(data) {
+                        tips(ErrorKey::Scopes).weak()
+                    } else {
+                        r.scope_diagnostic(data)
+                    };
+                    diagnostic
                         .msg(msg)
                         .loc(key)
                         .loc_msg(reason.token(), msg2)
@@ -1592,7 +1645,10 @@ impl ScopeContext {
                 let msg = format!("`{key}` expects scope:{name} to be set");
                 let msg2 = "here";
                 self.log_traceback(
-                    warn(ErrorKey::StrictScopes).msg(msg).loc(key).loc_msg(token, msg2),
+                    missing_saved_scope(warn(ErrorKey::StrictScopes))
+                        .msg(msg)
+                        .loc(key)
+                        .loc_msg(token, msg2),
                 )
                 .push();
             } else {
@@ -1740,6 +1796,10 @@ impl Drop for ScopeContext {
             );
         }
     }
+}
+
+fn missing_saved_scope(default: ReportBuilderStage1) -> ReportBuilderStage1 {
+    if Game::is_vic3() { tips(ErrorKey::StrictScopes).weak() } else { default }
 }
 
 /// Deduce a scope type from a scope's name. This leads to better error messages.

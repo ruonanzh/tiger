@@ -3,8 +3,8 @@ use crate::db::{Db, DbKind};
 use crate::everything::Everything;
 use crate::game::GameFlags;
 use crate::helpers::TigerHashSet;
-use crate::item::{Item, ItemExt, ItemLoader};
-use crate::report::{ErrorKey, report, untidy};
+use crate::item::{Item, ItemLoader};
+use crate::report::{ErrorKey, tips, untidy};
 use crate::token::Token;
 use crate::validator::Validator;
 
@@ -33,8 +33,7 @@ impl DbKind for MediaAlias {
             {
                 data.fileset.mark_used(video.as_str());
                 let msg = format!("file {video} does not exist; fallback {kind} {terminal} exists");
-                let mut diagnostic =
-                    report(ErrorKey::MissingFile, Item::File.severity()).weak().msg(msg).loc(video);
+                let mut diagnostic = tips(ErrorKey::MissingFile).weak().msg(msg).loc(video);
                 for link in links {
                     diagnostic = diagnostic.loc_msg(*link, "fallback alias reference");
                 }

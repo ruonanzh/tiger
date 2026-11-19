@@ -3,7 +3,7 @@ use lalrpop_util::ParseError;
 use crate::block::{Block, BV, BlockItem, Comparator, Eq, Field};
 use crate::parse::pdxfile::lexer::{Directive, Lexeme, LexError};
 use crate::parse::pdxfile::memory::CombinedMemory;
-use crate::parse::pdxfile::{HasMacroParams, define_var, warn_macros, split_macros, report_error, get_numeric_var};
+use crate::parse::pdxfile::{HasMacroParams, define_var, warn_macros, split_macros, report_error, get_numeric_var, report_missing_reader_variable};
 use crate::report::{err, warn, ErrorKey};
 use crate::token::Token;
 
@@ -180,7 +180,7 @@ Value: (Token, HasMacroParams) = {
             (Token::from_static_str(t.as_str(), token.loc), false)
         } else {
             let msg = format!("reader variable {name} not defined");
-            err(ErrorKey::ReaderDirectives).msg(msg).loc(&token).push();
+            report_missing_reader_variable(&token, msg);
             (token, false)
         }
     },
@@ -325,7 +325,7 @@ MacroInsert: Vec<BlockItem> = {
 
 /// A `@[ ... ]` parse-time calculation.
 Calculation: Token = {
-    <start:"@["> <expr:Expr> "]" => Token::new(&expr.to_string(), start.get_loc()),
+    <start:"@["> <expr:Expr> "]" => Token::new(&expr.to_string(), start.get_loc()).with_inline_calculation(),
 }
 
 /// Precedence 0: addition and subtraction.

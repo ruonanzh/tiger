@@ -3,6 +3,7 @@ use crate::db::{Db, DbKind};
 use crate::everything::Everything;
 use crate::game::GameFlags;
 use crate::item::{Item, ItemLoader};
+use crate::report::Severity;
 use crate::token::Token;
 use crate::validate::validate_possibly_named_color;
 use crate::validator::Validator;
@@ -29,19 +30,20 @@ impl DbKind for Culture {
 
         data.verify_exists(Item::Localization, key);
 
-        // The game will log errors if these are not defined.
+        // These keys are derived from the culture name. Report indexed coverage
+        // without claiming that every culture needs all six modifier definitions.
         let modif = format!("{key}_standard_of_living_modifier_positive");
-        data.verify_exists_implied(Item::Modifier, &modif, key);
+        data.verify_exists_implied_max_sev(Item::Modifier, &modif, key, Severity::Tips);
         let modif = format!("{key}_standard_of_living_modifier_negative");
-        data.verify_exists_implied(Item::Modifier, &modif, key);
+        data.verify_exists_implied_max_sev(Item::Modifier, &modif, key, Severity::Tips);
         let modif = format!("{key}_cultural_acceptance_modifier_positive");
-        data.verify_exists_implied(Item::Modifier, &modif, key);
+        data.verify_exists_implied_max_sev(Item::Modifier, &modif, key, Severity::Tips);
         let modif = format!("{key}_cultural_acceptance_modifier_negative");
-        data.verify_exists_implied(Item::Modifier, &modif, key);
+        data.verify_exists_implied_max_sev(Item::Modifier, &modif, key, Severity::Tips);
         let modif = format!("{key}_fervor_target_modifier_positive");
-        data.verify_exists_implied(Item::Modifier, &modif, key);
+        data.verify_exists_implied_max_sev(Item::Modifier, &modif, key, Severity::Tips);
         let modif = format!("{key}_fervor_target_modifier_negative");
-        data.verify_exists_implied(Item::Modifier, &modif, key);
+        data.verify_exists_implied_max_sev(Item::Modifier, &modif, key, Severity::Tips);
 
         vd.field_validated("color", validate_possibly_named_color);
         vd.field_item("religion", Item::Religion);

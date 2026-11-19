@@ -37,7 +37,9 @@ fn validate_flag_definition(block: &Block, data: &Everything) {
     for field in &["coa", "coa_with_overlord_canton", "subject_canton", "revolutionary_canton"] {
         if let Some(token) = vd.field_value(field) {
             if let Some((_, list)) = token.split_once('"') {
-                data.verify_exists(Item::CoaTemplateList, &list);
+                data.verify_exists_max_sev(Item::CoaTemplateList, &list, crate::Severity::Tips);
+            } else if *field == "subject_canton" {
+                data.verify_exists_max_sev(Item::Coa, token, crate::Severity::Tips);
             } else {
                 data.verify_exists(Item::Coa, token);
             }

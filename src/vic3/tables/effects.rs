@@ -285,6 +285,7 @@ const SCOPE_EFFECT: &[(Scopes, &str, Effect)] = &[
     (Scopes::State, "kill_population_percent_in_state", Vb(validate_kill_population)),
     (Scopes::Ship, "kill_ship", Boolean),
     (Scopes::Country, "leave_plays_supporting", Scope(Scopes::Country)),
+    (Scopes::Country, "leave_power_bloc", Yes),
     (Scopes::Country.union(Scopes::State), "liberate_slaves", Yes),
     (Scopes::Country, "liberate_slaves_in_incorporated_states", Yes),
     (Scopes::Country, "liberate_slaves_in_unincorporated_states", Yes),

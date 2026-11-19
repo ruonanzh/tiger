@@ -47,8 +47,12 @@ impl DbKind for CharacterInteraction {
         // undocumented
 
         vd.field_trigger_rooted("should_ai_evaluate", Tooltipped::No, Scopes::Country);
-        // TODO: ai_will_do seems to overlap the previous one. Check if it really works.
-        vd.field_trigger_rooted("ai_will_do", Tooltipped::No, Scopes::Country);
+        // The shipped ai_will_do blocks use is_heir_of_own_country on the character.
+        vd.field_trigger_builder("ai_will_do", Tooltipped::No, |key| {
+            let mut sc = ScopeContext::new_inferred_root(Scopes::Character, key);
+            sc.define_name("actor", Scopes::Country, key);
+            sc
+        });
         vd.field_bool("ai_considers_exiles");
     }
 }

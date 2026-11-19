@@ -207,7 +207,7 @@ fn build_sc(key: &Token) -> ScopeContext {
     sc.define_name("target_country", Scopes::Country, key);
     sc.define_name("target_state", Scopes::State, key);
     sc.define_name("stakeholder", Scopes::Country, key);
-    sc.define_name("target_region", Scopes::StateRegion, key);
+    sc.define_name("target_region", Scopes::StrategicRegion, key);
     sc.define_name("article_options", Scopes::TreatyArticleOptions, key);
     sc
 }

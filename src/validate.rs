@@ -199,8 +199,7 @@ pub fn validate_optional_duration(vd: &mut Validator, sc: &mut ScopeContext) {
 
 // Does not accept script values (per the documentation)
 pub fn validate_color(block: &Block, _data: &Everything) {
-    // Reports in this function are `warn` level because a bad color is just an UI issue,
-    // and normal confidence level because I'm not 100% sure of the color formats.
+    let range_severity = if Game::is_vic3() { Severity::Tips } else { Severity::Warning };
     let mut count = 0;
     // Get the color tag, as in color = hsv { 0.5 1.0 1.0 }
     let tag = block.tag.as_deref().map_or("rgb", Token::as_str);
@@ -217,7 +216,12 @@ pub fn validate_color(block: &Block, _data: &Everything) {
                         if t.is_integer() {
                             info = "did you mean `hsv360`?";
                         }
-                        warn(ErrorKey::Colors).weak().msg(msg).info(info).loc(t).push();
+                        report(ErrorKey::Colors, range_severity)
+                            .weak()
+                            .msg(msg)
+                            .info(info)
+                            .loc(t)
+                            .push();
                     }
                 } else {
                     warn(ErrorKey::Colors).msg("expected hsv value").loc(t).push();
@@ -226,10 +230,10 @@ pub fn validate_color(block: &Block, _data: &Everything) {
                 if let Some(i) = t.get_integer() {
                     if count == 0 && !(0..=360).contains(&i) {
                         let msg = "hsv360 h values should be between 0 and 360";
-                        warn(ErrorKey::Colors).msg(msg).loc(t).push();
+                        report(ErrorKey::Colors, range_severity).msg(msg).loc(t).push();
                     } else if count > 0 && !(0..=100).contains(&i) {
                         let msg = "hsv360 s and v values should be between 0 and 100";
-                        warn(ErrorKey::Colors).msg(msg).loc(t).push();
+                        report(ErrorKey::Colors, range_severity).msg(msg).loc(t).push();
                     }
                 } else {
                     warn(ErrorKey::Colors).msg("expected hsv360 value").loc(t).push();
@@ -237,13 +241,13 @@ pub fn validate_color(block: &Block, _data: &Everything) {
             } else if let Some(i) = t.get_integer() {
                 if !(0..=255).contains(&i) {
                     let msg = "color values should be between 0 and 255";
-                    warn(ErrorKey::Colors).msg(msg).loc(t).push();
+                    report(ErrorKey::Colors, range_severity).msg(msg).loc(t).push();
                 }
             } else if let Some(f) = t.get_number() {
                 t.check_number();
                 if !(0.0..=1.0).contains(&f) {
                     let msg = "color values should be between 0.0 and 1.0";
-                    warn(ErrorKey::Colors).msg(msg).loc(t).push();
+                    report(ErrorKey::Colors, range_severity).msg(msg).loc(t).push();
                 }
             } else {
                 warn(ErrorKey::Colors).msg("expected color value").loc(t).push();
@@ -1086,6 +1090,17 @@ pub fn validate_numeric_range(
     sev: Severity,
     conf: Confidence,
 ) {
+    validate_numeric_interval(block, data, min..=max, true, sev, conf);
+}
+
+pub(crate) fn validate_numeric_interval(
+    block: &Block,
+    data: &Everything,
+    limits: std::ops::RangeInclusive<f64>,
+    ordered: bool,
+    sev: Severity,
+    conf: Confidence,
+) {
     let mut vd = Validator::new(block, data);
     let mut count = 0;
     let mut prev = 0.0;
@@ -1093,13 +1108,14 @@ pub fn validate_numeric_range(
     for token in vd.values() {
         if let Some(n) = token.expect_number() {
             count += 1;
-            if !(min..=max).contains(&n) {
-                let msg = format!("expected number between {min} and {max}");
+            if !limits.contains(&n) {
+                let msg =
+                    format!("expected number between {} and {}", limits.start(), limits.end());
                 report(ErrorKey::Range, sev).conf(conf).msg(msg).loc(token).push();
             }
             if count == 1 {
                 prev = n;
-            } else if count == 2 && n < prev {
+            } else if ordered && count == 2 && n < prev {
                 let msg = "expected second number to be bigger than first number";
                 report(ErrorKey::Range, sev).conf(conf).msg(msg).loc(token).push();
             } else if count == 3 {
