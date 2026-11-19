@@ -34,6 +34,7 @@ impl DbKind for SubjectType {
         vd.field_bool("can_start_own_diplomatic_plays");
         vd.field_bool("breaks_if_subject_not_protected");
         vd.field_bool("join_overlord_wars");
+        vd.field_bool("forced_into_overlord_revolution");
         vd.field_bool("can_have_subjects");
         vd.field_bool("overlord_must_be_higher_rank");
         vd.field_bool("overlord_must_be_same_country_type");
@@ -46,6 +47,7 @@ impl DbKind for SubjectType {
 
         vd.field_numeric("convoy_contribution");
         vd.field_item("diplomatic_action", Item::DiplomaticAction);
+        vd.field_item("re_establish_war_goal", Item::WarGoalType);
 
         vd.field_integer("autonomy_level");
         // not sure what this is supposed to mean

@@ -53,10 +53,12 @@ impl DbKind for WarGoalType {
                 "liberate_subject",
                 "make_dominion",
                 "make_protectorate",
+                "make_subject",
                 "make_tributary",
                 "open_market",
                 "reduce_autonomy",
                 "regime_change",
+                "release_as_subject",
                 "return_state",
                 "revoke_all_claims",
                 "revoke_claim",
@@ -68,6 +70,16 @@ impl DbKind for WarGoalType {
                 "custom",
             ],
         );
+
+        let kind = block.get_field_value("kind");
+        if kind.is_some_and(|kind| kind.is("make_subject")) {
+            vd.req_field("subject_type");
+        }
+        if kind.is_some_and(|kind| kind.is("make_subject") || kind.is("release_as_subject")) {
+            vd.field_item("subject_type", Item::SubjectType);
+        } else {
+            vd.field_value("subject_type");
+        }
 
         let settings = &[
             "require_target_be_part_of_war",
@@ -132,13 +144,18 @@ impl DbKind for WarGoalType {
             ],
         );
 
+        vd.field_choice("side_switch", &["never", "on_capitulation", "always"]);
         vd.field_choice("target_type", &["country", "state", "treaty_article"]);
+        vd.field_numeric("fill_per_week");
+        vd.field_numeric("deplete_per_week");
 
         for condition in &["possible", "valid"] {
             vd.field_trigger_builder(condition, Tooltipped::Yes, &build_sc);
         }
 
-        for calculation in &["maneuvers", "infamy", "infamy_severity", "infamy_min", "infamy_max"] {
+        for calculation in
+            &["maneuvers", "infamy", "infamy_severity", "infamy_min", "infamy_max", "impact_mult"]
+        {
             vd.field_script_value_builder(calculation, &build_sc);
         }
 
@@ -171,6 +188,7 @@ impl DbKind for WarGoalType {
         vd.multi_field_validated_block("ai", |block, data| {
             let mut vd = Validator::new(block, data);
             vd.field_bool("is_significant_demand");
+            vd.field_bool("settles_grievance");
         });
     }
 }
