@@ -60,6 +60,7 @@ struct Location {
     from: String,
     path: String,
     linenr: usize,
+    tag: Option<String>,
 }
 
 fn write_file(root: &Path, relative: &str, content: &str) {
@@ -710,4 +711,83 @@ je_test_events.2 = {
         );
     }
     assert_eq!(reports.len(), 2, "{reports:#?}");
+}
+
+#[test]
+fn journal_entry_map_modes() {
+    let (_fixture, game, mod_dir) = setup();
+    write_file(
+        &game,
+        "game/common/named_colors/test_colors.txt",
+        "colors = { test_ember = { 140 20 10 } }",
+    );
+    let script = r#"je_tiger_test = {
+    immediate = { save_scope_as = map_runtime_owner }
+    map_color = {
+        if = {
+            limit = { root.turmoil > 0 }
+            if = { limit = { is_in_revolt = yes } value = "test_ember" }
+            else = { lerp = { min_color = "test_ember" max_color = { 40 50 60 } factor = { value = root.turmoil multiply = 2 } } }
+        }
+        else_if = { limit = { owner ?= { is_subject = no } } value = { 20 30 40 } }
+        else = { value = { 30 40 50 } }
+    }
+    map_color_second = {
+        if = { limit = { root.turmoil > 0 } lerp = { min_color = { 20 30 40 } max_color = "test_ember" factor = 0.5 } }
+    }
+    map_tooltip = {
+        owner ?= { save_scope_as = map_local_owner }
+        if = {
+            limit = { root.turmoil > 0 scope:map_local_owner ?= { is_subject = no } }
+            custom_tooltip_no_bullet = je_tiger_test_header
+        }
+    }
+}
+"#;
+
+    assert!(validate(&game, &mod_dir, script).is_empty());
+    let malformed = script
+        .replace("is_in_revolt = yes", "set_variable = bad_trigger")
+        .replace("value = \"test_ember\"", "value = unknown_test_color")
+        .replace("max_color = { 40 50 60 }", "max_colour = { 40 50 60 }")
+        .replace("{ 20 30 40 } }", "{ 20 30 40 stray = 1 } }")
+        .replace("factor = 0.5", "factor = root.bad_factor")
+        .replace("limit = { owner ?= { is_subject = no } }", "limit = { is_subject = no }")
+        .replace("custom_tooltip_no_bullet = je_tiger_test_header", "is_in_revolt = yes")
+        .replace(
+            "root.turmoil > 0 }",
+            "root.turmoil > 0 scope:map_runtime_owner = { always = yes } }",
+        );
+    let reports = validate(&game, &mod_dir, &malformed);
+    expect_report(&reports, "wrong-use", "`set_variable` is an effect", 6);
+    expect_report(&reports, "missing-item", "unknown_test_color", 6);
+    expect_report(&reports, "unknown-field", "max_colour", 7);
+    expect_report(&reports, "scopes", "scope seems to be state", 9);
+    expect_report(&reports, "unknown-field", "stray", 9);
+    expect_report(&reports, "wrong-use", "`is_in_revolt` is a trigger", 19);
+    assert!(reports.iter().any(|report| report.message.contains("bad_factor")), "{reports:#?}");
+
+    let dynamic: Vec<_> = reports.iter().filter(|report| report.key == "strict-scopes").collect();
+    assert_eq!(dynamic.len(), 2, "{reports:#?}");
+    for line in [5, 13] {
+        assert!(
+            dynamic.iter().any(|report| {
+                report.severity == "warning"
+                    && report.message.contains("scope:map_runtime_owner might not be available")
+                    && report.locations.first().is_some_and(|location| {
+                        location.from == "MOD"
+                            && location.path.replace('\\', "/") == ENTRY_PATH
+                            && location.linenr == line
+                    })
+                    && report.locations.iter().any(|location| {
+                        location.tag.as_deref() == Some("scopes initialized here")
+                            && location.from == "MOD"
+                            && location.path.replace('\\', "/") == ENTRY_PATH
+                            && location.linenr == 1
+                    })
+            }),
+            "missing dynamic scope diagnostic at {ENTRY_PATH}:{line}\n{reports:#?}"
+        );
+    }
+    assert!(validate(&game, &mod_dir, script).is_empty());
 }

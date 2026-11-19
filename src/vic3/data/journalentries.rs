@@ -8,10 +8,12 @@ use crate::desc::validate_desc;
 use crate::everything::Everything;
 use crate::game::GameFlags;
 use crate::item::{Item, ItemLoader};
-use crate::report::{ErrorKey, err};
+use crate::report::{ErrorKey, Severity, err};
 use crate::scopes::Scopes;
+use crate::script_value::validate_script_value;
 use crate::token::Token;
 use crate::tooltipped::Tooltipped;
+use crate::validate::{validate_ifelse_sequence, validate_possibly_named_color};
 use crate::validator::Validator;
 
 #[derive(Clone, Debug)]
@@ -164,6 +166,16 @@ impl DbKind for JournalEntry {
         vd.field_effect("on_become_involved_after_activation", Tooltipped::No, &mut country_sc);
         vd.field_effect("on_no_longer_involved", Tooltipped::No, &mut country_sc);
 
+        // Map modes are evaluated for each state, with a scope context separate from the JE.
+        let mut map_sc = ScopeContext::new(Scopes::State, key);
+        map_sc.advise_on_missing_saved_scopes();
+        for field in ["map_color", "map_color_second"] {
+            vd.field_validated_block_sc(field, &mut map_sc.clone(), |block, data, sc| {
+                validate_map_color(block, data, sc, false);
+            });
+        }
+        vd.field_effect("map_tooltip", Tooltipped::Yes, &mut map_sc);
+
         vd.field_validated_block("widget", |block, data| {
             let mut vd = Validator::new(block, data);
             vd.field_item("gui", Item::File);
@@ -298,6 +310,40 @@ impl DbKind for JournalEntryGroup {
             return block.get_field_value("context").is_some_and(|v| v.is("none"));
         }
         false
+    }
+}
+
+fn validate_map_color(block: &Block, data: &Everything, sc: &mut ScopeContext, conditional: bool) {
+    validate_ifelse_sequence(block, "if", "else_if", "else");
+
+    let mut vd = Validator::new(block, data);
+    if conditional {
+        vd.req_field_warn("limit");
+        vd.field_trigger("limit", Tooltipped::No, sc);
+    }
+    vd.multi_field_validated("value", validate_map_color_value);
+    vd.multi_field_validated_block_sc("lerp", sc, |block, data, sc| {
+        let mut vd = Validator::new(block, data);
+        for field in ["min_color", "max_color"] {
+            vd.multi_field_validated(field, validate_map_color_value);
+        }
+        vd.multi_field_validated_sc("factor", sc, validate_script_value);
+    });
+
+    for (field, conditional) in [("if", true), ("else_if", true), ("else", false)] {
+        vd.multi_field_validated_block(field, |block, data| {
+            validate_map_color(block, data, &mut sc.clone(), conditional);
+        });
+    }
+}
+
+fn validate_map_color_value(bv: &BV, data: &Everything) {
+    validate_possibly_named_color(bv, data);
+    if let BV::Block(block) = bv {
+        // The shared color validator only checks scalar components.
+        let mut vd = Validator::new(block, data);
+        vd.set_max_severity(Severity::Warning);
+        vd.values();
     }
 }
 
