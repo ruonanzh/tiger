@@ -159,6 +159,7 @@ impl Effect {
         if !self.cached_compat(key, &[], tooltipped, sc, data, special_tokens, &mut has_tooltip) {
             let mut our_sc = ScopeContext::new_unrooted(Scopes::all(), &self.key);
             our_sc.set_strict_scopes(false);
+            our_sc.set_effects_display_only(sc.effects_display_only());
             if self.scope_override.is_some() {
                 our_sc.set_no_warn(true);
             }
@@ -166,7 +167,7 @@ impl Effect {
                 key,
                 &[],
                 tooltipped,
-                false,
+                sc.effects_display_only(),
                 (our_sc.clone(), SpecialTokens::none(), false),
             );
             let mut our_st = SpecialTokens::empty();
@@ -187,7 +188,13 @@ impl Effect {
             }
             sc.expect_compatibility(&our_sc, key, data);
             special_tokens.merge(&our_st);
-            self.cache.insert(key, &[], tooltipped, false, (our_sc, our_st, has_tooltip));
+            self.cache.insert(
+                key,
+                &[],
+                tooltipped,
+                sc.effects_display_only(),
+                (our_sc, our_st, has_tooltip),
+            );
         }
         has_tooltip && tooltipped.is_tooltipped()
     }
@@ -207,11 +214,17 @@ impl Effect {
         special_tokens: &mut SpecialTokens,
         has_tooltip: &mut bool,
     ) -> bool {
-        self.cache.perform(key, args, tooltipped, false, |(our_sc, our_st, ht)| {
-            sc.expect_compatibility(our_sc, key, data);
-            special_tokens.merge(our_st);
-            *has_tooltip |= ht;
-        })
+        self.cache.perform(
+            key,
+            args,
+            tooltipped,
+            sc.effects_display_only(),
+            |(our_sc, our_st, ht)| {
+                sc.expect_compatibility(our_sc, key, data);
+                special_tokens.merge(our_st);
+                *has_tooltip |= ht;
+            },
+        )
     }
 
     pub fn validate_macro_expansion(
@@ -231,6 +244,7 @@ impl Effect {
         {
             let mut our_sc = ScopeContext::new_unrooted(Scopes::all(), &self.key);
             our_sc.set_strict_scopes(false);
+            our_sc.set_effects_display_only(sc.effects_display_only());
             if self.scope_override.is_some() {
                 our_sc.set_no_warn(true);
             }
@@ -240,7 +254,7 @@ impl Effect {
                 key,
                 args,
                 tooltipped,
-                false,
+                sc.effects_display_only(),
                 (our_sc.clone(), SpecialTokens::none(), false),
             );
             let mut our_st = SpecialTokens::empty();
@@ -262,7 +276,13 @@ impl Effect {
 
             sc.expect_compatibility(&our_sc, key, data);
             special_tokens.merge(&our_st);
-            self.cache.insert(key, args, tooltipped, false, (our_sc, our_st, has_tooltip));
+            self.cache.insert(
+                key,
+                args,
+                tooltipped,
+                sc.effects_display_only(),
+                (our_sc, our_st, has_tooltip),
+            );
         }
         has_tooltip && tooltipped.is_tooltipped()
     }

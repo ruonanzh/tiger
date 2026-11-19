@@ -51,6 +51,10 @@ impl DbKind for Modifier {
         data: &Everything,
         sc: &mut ScopeContext,
     ) {
+        if sc.effects_display_only() {
+            return;
+        }
+
         let mut vd = Validator::new(block, data);
 
         // Mark as known field

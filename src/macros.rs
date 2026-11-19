@@ -15,8 +15,8 @@ struct MacroKey {
     /// lexically sorted macro arguments
     args: Vec<(&'static str, &'static str)>,
     tooltipped: Tooltipped,
-    /// only for triggers
-    negated: bool,
+    /// Trigger negation or scripted-effect display-only status, depending on the cache.
+    context_flag: bool,
 }
 
 impl MacroKey {
@@ -24,12 +24,12 @@ impl MacroKey {
         mut loc: Loc,
         args: &[(&'static str, Token)],
         tooltipped: Tooltipped,
-        negated: bool,
+        context_flag: bool,
     ) -> Self {
         loc.link_idx = None;
         let mut args: Vec<_> = args.iter().map(|(parm, arg)| (*parm, arg.as_str())).collect();
         args.sort_unstable();
-        Self { loc, args, tooltipped, negated }
+        Self { loc, args, tooltipped, context_flag }
     }
 }
 
@@ -48,10 +48,10 @@ impl<T> MacroCache<T> {
         key: &Token,
         args: &[(&'static str, Token)],
         tooltipped: Tooltipped,
-        negated: bool,
+        context_flag: bool,
         mut f: F,
     ) -> bool {
-        let key = MacroKey::new(key.loc, args, tooltipped, negated);
+        let key = MacroKey::new(key.loc, args, tooltipped, context_flag);
         if let Some(x) = self.cache.read().unwrap().get(&key) {
             f(x);
             true
@@ -65,10 +65,10 @@ impl<T> MacroCache<T> {
         key: &Token,
         args: &[(&'static str, Token)],
         tooltipped: Tooltipped,
-        negated: bool,
+        context_flag: bool,
         value: T,
     ) {
-        let key = MacroKey::new(key.loc, args, tooltipped, negated);
+        let key = MacroKey::new(key.loc, args, tooltipped, context_flag);
         self.cache.write().unwrap().insert(key, value);
     }
 }

@@ -357,5 +357,7 @@ fn validate_effect_desc(block: &Block, data: &Everything, sc: &mut ScopeContext)
     let mut vd = Validator::new(block, data);
 
     vd.field_localization("header", sc);
-    vd.field_effect("effect", Tooltipped::Yes, sc);
+    let mut display_sc = sc.clone();
+    display_sc.set_effects_display_only(true);
+    vd.field_effect("effect", Tooltipped::Yes, &mut display_sc);
 }

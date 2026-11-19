@@ -106,6 +106,13 @@ impl Events {
         None
     }
 
+    #[cfg(feature = "vic3")]
+    pub(crate) fn declared_country_scope<'a>(&'a self, id: &'a str) -> Option<&'a Token> {
+        self.get_event(id)
+            .filter(|event| event.expects_from_token.is("country_event"))
+            .map(|event| &event.expects_from_token)
+    }
+
     pub fn check_scope(&self, token: &Token, sc: &mut ScopeContext, data: &Everything) {
         if let Some(event) = self.get_event(token.as_str()) {
             sc.expect(event.expects_scope, &Reason::Token(token.clone()), data);

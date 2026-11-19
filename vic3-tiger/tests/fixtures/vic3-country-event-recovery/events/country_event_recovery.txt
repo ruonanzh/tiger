@@ -1,0 +1,16 @@
+﻿namespace = recovery
+recovery.1 = {
+    type = country_event
+    immediate = {
+        add_modifier = recovery_modifier
+        kill_character = yes
+        scope:recovery_entry = { set_variable = recovery_seen }
+    }
+    option = { name = recovery.1.a }
+}
+
+recovery.2 = {
+    type = country_event
+    immediate = { add_modifier = recovery_modifier }
+    option = { name = recovery.2.a }
+}

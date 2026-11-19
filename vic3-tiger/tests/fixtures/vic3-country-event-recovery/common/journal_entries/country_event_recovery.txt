@@ -1,0 +1,17 @@
+﻿je_recovery_without_country = {
+    context = none
+    immediate = {
+        scope:journal_entry = {
+            save_scope_as = recovery_entry
+        }
+        trigger_event = { id = recovery.1 }
+        add_modifier = recovery_modifier
+    }
+}
+
+je_recovery_with_country = {
+    context = country
+    immediate = {
+        trigger_event = { id = recovery.2 }
+    }
+}

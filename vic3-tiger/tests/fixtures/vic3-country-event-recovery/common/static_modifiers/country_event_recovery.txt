@@ -1,0 +1,3 @@
+﻿recovery_modifier = {
+    country_legitimacy_base_add = 25
+}

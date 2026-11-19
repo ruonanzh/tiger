@@ -1,0 +1,1 @@
+﻿country_legitimacy_base_add = { decimals = 0 color = good }

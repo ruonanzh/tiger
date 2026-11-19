@@ -74,6 +74,9 @@ pub struct ScopeContext {
     #[cfg(feature = "vic3")]
     review_missing_scopes: bool,
 
+    /// Effects in this context only generate descriptions and are never executed.
+    effects_display_only: bool,
+
     /// A special flag for scope contexts that are known to be wrong. It's used for the
     /// `scope_override` config file feature. If `no_warn` is set then this `ScopeContext` will not
     /// emit any reports.
@@ -183,6 +186,7 @@ pub struct Signature {
     root: Scopes,
     #[cfg(feature = "vic3")]
     review_missing_scopes: bool,
+    effects_display_only: bool,
     // these are all sorted
     scope_names: Vec<(&'static str, Scopes)>,
     scope_list_names: Vec<(&'static str, Scopes)>,
@@ -264,6 +268,7 @@ impl ScopeContext {
             strict_scopes: true,
             #[cfg(feature = "vic3")]
             review_missing_scopes: false,
+            effects_display_only: false,
             no_warn: false,
             source: token,
             traceback: Vec::new(),
@@ -294,6 +299,7 @@ impl ScopeContext {
             strict_scopes: true,
             #[cfg(feature = "vic3")]
             review_missing_scopes: false,
+            effects_display_only: false,
             no_warn: false,
             source: token,
             traceback: Vec::new(),
@@ -327,6 +333,14 @@ impl ScopeContext {
     #[cfg(feature = "vic3")]
     pub fn advise_on_missing_saved_scopes(&mut self) {
         self.review_missing_scopes = true;
+    }
+
+    pub fn set_effects_display_only(&mut self, display_only: bool) {
+        self.effects_display_only = display_only;
+    }
+
+    pub fn effects_display_only(&self) -> bool {
+        self.effects_display_only
     }
 
     /// Declare whether all the named scopes in this scope context are known. Default is true.
@@ -374,6 +388,18 @@ impl ScopeContext {
         new_sc.from.insert(0, new_sc.root.clone());
         let (scopes, reason) = new_sc.scopes_reason(data);
         new_sc.root = ScopeEntry::Scope(scopes, reason.clone());
+        #[cfg(feature = "vic3")]
+        if Game::is_vic3()
+            && !self.effects_display_only
+            && scopes == Scopes::None
+            && matches!(self.resolve_backrefs(THIS), ScopeEntry::Scope(..) | ScopeEntry::Rootref)
+            && let ActionOrEvent::Event(id, ..) = &trace
+            && let Some(event_type) = data.events.declared_country_scope(id.as_str())
+        {
+            // The caller already reported this mismatch. Check the body with its declared root
+            // while preserving the names inherited from the caller.
+            new_sc.root = ScopeEntry::Scope(Scopes::Country, Reason::Builtin(event_type.clone()));
+        }
         new_sc.scope_stack = vec![ScopeEntry::Rootref];
         new_sc.prev_levels = 0;
         new_sc.is_unrooted = false;
@@ -808,6 +834,7 @@ impl ScopeContext {
             root,
             #[cfg(feature = "vic3")]
             review_missing_scopes: self.review_missing_scopes,
+            effects_display_only: self.effects_display_only,
             scope_names: process_scope_names(self, &self.scope_names, data),
             scope_list_names: process_scope_names(self, &self.scope_list_names, data),
             local_names: process_local_names(self, &self.local_names, data),
@@ -1670,6 +1697,26 @@ impl ScopeContext {
                 self.is_input.push(other.is_input[oidx].clone());
             }
         }
+    }
+
+    #[cfg(feature = "vic3")]
+    pub(crate) fn inherit_display_effect_inputs(
+        &mut self,
+        mut display: Self,
+        key: &Token,
+        data: &Everything,
+    ) {
+        // Concrete callers already checked the inputs while validating the display block.
+        if !self.is_strict() {
+            let inputs = &display.is_input;
+            display.scope_names.retain(|_, (idx, _)| inputs[*idx].is_some());
+            display.scope_list_names.retain(|_, (idx, _)| inputs[*idx].is_some());
+            display.local_names.retain(|_, idx| inputs[*idx].is_some());
+            display.local_list_names.retain(|_, idx| inputs[*idx].is_some());
+            self.expect_compatibility(&display, key, data);
+        }
+        // The display clone can inherit open scope levels from its caller.
+        display.destroy();
     }
 
     /// Safely destroy a `ScopeContext` without fully unwinding its stack.

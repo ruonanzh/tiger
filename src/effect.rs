@@ -526,6 +526,17 @@ pub fn validate_effect_control(
 ) -> bool {
     let mut vd = Validator::new(block, data);
 
+    #[cfg(feature = "vic3")]
+    let mut display_sc = (Game::is_vic3() && caller == "show_as_tooltip").then(|| {
+        let mut display_sc = sc.clone();
+        display_sc.set_effects_display_only(true);
+        display_sc
+    });
+    #[cfg(feature = "vic3")]
+    let original_sc = sc;
+    #[cfg(feature = "vic3")]
+    let sc = display_sc.as_mut().unwrap_or(&mut *original_sc);
+
     if caller == "if" || caller == "else_if" {
         vd.req_field_warn("limit");
     }
@@ -633,7 +644,7 @@ pub fn validate_effect_control(
         vd.ban_field("show_chance", || "`random_list` or `duel`");
     }
 
-    validate_effect_internal(
+    let has_tooltip = validate_effect_internal(
         caller,
         ListType::None,
         block,
@@ -642,7 +653,15 @@ pub fn validate_effect_control(
         &mut vd,
         tooltipped,
         special_tokens,
-    )
+    );
+
+    #[cfg(feature = "vic3")]
+    if let Some(display_sc) = display_sc {
+        let key = Token::new("show_as_tooltip", block.loc);
+        original_sc.inherit_display_effect_inputs(display_sc, &key, data);
+    }
+
+    has_tooltip
 }
 
 /// This `enum` describes what arguments an effect takes, so that they can be validated.
