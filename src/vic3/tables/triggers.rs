@@ -1704,7 +1704,11 @@ const TRIGGER: &[(Scopes, &str, Trigger)] = &[
     ),
     (Scopes::Country, "prestige", CompareValue),
     (Scopes::Country, "primary_cultures_percent_country", CompareValue),
-    (Scopes::State, "primary_cultures_percent_state", CompareValue),
+    (
+        Scopes::State,
+        "primary_cultures_percent_state",
+        BlockOrCompareValue(&[("target_country", Scope(Scopes::Country)), ("value", CompareValue)]),
+    ),
     (Scopes::Character, "primary_role", Item(Item::CharacterRole)),
     (Scopes::Building, "private_ownership_fraction", CompareValue),
     (Scopes::Country, "produced_authority", CompareValue),
@@ -2222,6 +2226,7 @@ const TRIGGER_COMPLEX: &[(Scopes, &str, ArgumentValue, Scopes)] = {
         (Scopes::Country, "pop_type_percent_country", Scope(Scopes::PopType), Scopes::Value),
         (Scopes::State, "pop_type_percent_state", Scope(Scopes::PopType), Scopes::Value),
         (Scopes::State, "population_by_culture", Scope(Scopes::Culture), Scopes::Value),
+        (Scopes::State, "primary_cultures_percent_state", Scope(Scopes::Country), Scopes::Value),
         (
             Scopes::Country,
             "potential_diplomatic_play_power_ratio",
