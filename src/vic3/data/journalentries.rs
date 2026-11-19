@@ -282,6 +282,7 @@ impl DbKind for JournalEntryGroup {
 
         let mut vd = Validator::new(block, data);
         vd.field_choice("context", &["none", "country"]);
+        vd.field_bool("themed");
         vd.field_bool("updates_strategic_region_stances");
         vd.field_item("illustration", Item::File);
     }

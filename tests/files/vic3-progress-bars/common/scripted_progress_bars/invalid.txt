@@ -1,0 +1,32 @@
+﻿multiple_presets = {
+    name = progress_bar_test_name
+    desc = progress_bar_test_desc
+    default = yes
+    default_green = yes
+}
+
+multiple_presets_with_custom_look = {
+    name = progress_bar_test_name
+    desc = progress_bar_test_desc
+    default = yes
+    default_green = yes
+    marker = yes
+}
+
+missing_look = {
+    name = progress_bar_test_name
+    desc = progress_bar_test_desc
+}
+
+invalid_custom_look = {
+    name = progress_bar_test_name
+    desc = progress_bar_test_desc
+    marker = maybe
+    color = { 1 1 1 }
+    progress_texture = "gfx/missing_fill.dds"
+    background_texture = "gfx/missing_background.dds"
+    glow_texture = "gfx/missing_glow.dds"
+    glow_line_texture = "gfx/missing_glow_line.dds"
+    left_icon = "gfx/missing_left.dds"
+    right_icon = "gfx/missing_right.dds"
+}

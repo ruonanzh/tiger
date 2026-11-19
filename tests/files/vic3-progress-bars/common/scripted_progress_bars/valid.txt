@@ -1,0 +1,18 @@
+﻿custom_bar = {
+    name = progress_bar_test_name
+    desc = progress_bar_test_desc
+    color = { 1 0.5 0 1 }
+}
+
+mixed_bar = {
+    name = progress_bar_test_name
+    desc = progress_bar_test_desc
+    marker = yes
+    default = yes
+}
+
+preset_bar = {
+    name = progress_bar_test_name
+    desc = progress_bar_test_desc
+    double_sided_two_spains = yes
+}

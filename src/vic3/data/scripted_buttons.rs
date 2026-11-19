@@ -37,6 +37,11 @@ impl DbKind for ScriptedButton {
         vd.req_field("name");
         vd.field_validated_sc("name", &mut sc, validate_desc);
         vd.field_validated_sc("desc", &mut sc, validate_desc);
+        vd.field_localization("short_desc", &mut sc);
+        vd.field_item("icon", Item::File);
+        vd.field_script_value_no_breakdown("cost", &mut sc);
+        vd.field_bool("autocomplete");
+        vd.field_list("tags");
 
         vd.field_validated_block_sc("cooldown", &mut sc, validate_duration);
 

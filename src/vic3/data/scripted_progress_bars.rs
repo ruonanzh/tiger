@@ -49,7 +49,25 @@ impl DbKind for ScriptedProgressBar {
         vd.field_numeric("min_value");
         vd.field_numeric("max_value");
 
-        vd.req_field_one_of(BAR_TYPES);
+        vd.field_list_numeric_exactly("color", 4);
+        let mut custom_look = block.get_field("color").is_some();
+        custom_look |= vd.field_bool("marker");
+        for field in [
+            "progress_texture",
+            "background_texture",
+            "glow_texture",
+            "glow_line_texture",
+            "left_icon",
+            "right_icon",
+        ] {
+            custom_look |= vd.field_item(field, Item::File);
+        }
+
+        if custom_look {
+            vd.exclusive_fields(BAR_TYPES);
+        } else {
+            vd.req_field_one_of(BAR_TYPES);
+        }
         for field in BAR_TYPES {
             vd.field_bool(field);
         }
