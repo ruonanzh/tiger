@@ -767,6 +767,7 @@ impl GuiValidation {
             min_height => Integer,
             min_width => Integer,
             minimumsize => TwoNumberOrPercent,
+            mipmaplodbias if Game::is_vic3() => NumberOrInt32,
             mipmaplodbias => Integer,
             mirror => ChoiceSet(&["horizontal", "vertical"]),
             modal => Boolean,

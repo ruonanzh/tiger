@@ -1,4 +1,5 @@
-use std::path::PathBuf;
+use std::io::{BufRead, BufReader, Read};
+use std::path::{Path, PathBuf};
 
 use crate::block::{BV, Block};
 use crate::everything::Everything;
@@ -10,7 +11,7 @@ use crate::parse::ParserMemory;
 use crate::pdxfile::PdxFile;
 #[cfg(feature = "jomini")]
 use crate::report::{Confidence, Severity};
-use crate::report::{ErrorKey, warn};
+use crate::report::{ErrorKey, tips, warn};
 use crate::token::Token;
 use crate::util::SmartJoin;
 #[cfg(feature = "jomini")]
@@ -26,6 +27,7 @@ pub struct Assets {
     blend_shapes: TigerHashSet<Token>,
     musics: TigerHashSet<Token>,
     textures: TigerHashMap<String, (FileEntry, Token)>,
+    identical_textures: Vec<(FileEntry, FileEntry)>,
 }
 
 impl Assets {
@@ -130,10 +132,79 @@ impl Assets {
         self.textures.get(key).map(|(entry, _)| entry)
     }
 
+    fn report_identical_textures(&self) {
+        if self.identical_textures.is_empty() {
+            return;
+        }
+        let mut references = TigerHashMap::<_, Vec<&Token>>::default();
+        for (entry, _) in &self.identical_textures {
+            references.entry(entry.filename()).or_default();
+        }
+        for asset in self.assets.values().flat_map(TigerHashMap::values) {
+            for settings in asset.block.get_field_blocks("meshsettings") {
+                let textures = ["texture_diffuse", "texture_normal", "texture_specular"]
+                    .into_iter()
+                    .flat_map(|key| settings.get_field_values(key))
+                    .chain(
+                        settings
+                            .get_field_blocks("texture")
+                            .into_iter()
+                            .filter_map(|texture| texture.get_field_value("file")),
+                    );
+                for token in textures {
+                    if let Some(locations) =
+                        references.get_mut(std::ffi::OsStr::new(token.as_str()))
+                    {
+                        locations.push(token);
+                    }
+                }
+            }
+        }
+        for locations in references.values_mut() {
+            locations.sort_by_key(|token| (token.loc.pathname(), token.loc.line, token.loc.column));
+        }
+        for (first, second) in &self.identical_textures {
+            let basename = first.filename();
+            let mut report = tips(ErrorKey::DuplicateItem)
+                .msg(format!(
+                    "byte-identical DDS files share the texture name `{}`",
+                    basename.to_string_lossy()
+                ))
+                .loc(first)
+                .loc_msg(second, "identical copy");
+            for token in &references[basename] {
+                report = report.loc_msg(*token, "texture reference");
+            }
+            report.push();
+        }
+    }
+
     pub fn validate(&self, data: &Everything) {
+        self.report_identical_textures();
         for item in self.assets.values().flat_map(TigerHashMap::values) {
             item.validate(data);
         }
+    }
+}
+
+fn identical_files(first: &Path, second: &Path) -> std::io::Result<bool> {
+    let mut first = BufReader::new(std::fs::File::open(first)?);
+    let mut second = std::fs::File::open(second)?;
+    if first.get_ref().metadata()?.len() != second.metadata()?.len() {
+        return Ok(false);
+    }
+    let mut buf = [0; 8192];
+    loop {
+        let bytes = first.fill_buf()?;
+        if bytes.is_empty() {
+            return Ok(second.read(&mut buf[..1])? == 0);
+        }
+        let len = bytes.len().min(buf.len());
+        second.read_exact(&mut buf[..len])?;
+        if bytes[..len] != buf[..len] {
+            return Ok(false);
+        }
+        first.consume(len);
     }
 }
 
@@ -161,11 +232,17 @@ impl FileHandler<Option<Block>> for Assets {
             if let Some((other, _)) = self.textures.get(&*name)
                 && other.kind() >= entry.kind()
             {
-                warn(ErrorKey::DuplicateItem)
-                    .msg("texture file is redefined by another file")
-                    .loc(other)
-                    .loc_msg(entry, "the other file is here")
-                    .push();
+                if Game::is_vic3()
+                    && identical_files(other.fullpath(), entry.fullpath()).unwrap_or(false)
+                {
+                    self.identical_textures.push((other.clone(), entry.clone()));
+                } else {
+                    warn(ErrorKey::DuplicateItem)
+                        .msg("texture file is redefined by another file")
+                        .loc(other)
+                        .loc_msg(entry, "the other file is here")
+                        .push();
+                }
             }
             let entry_token = Token::new(&entry.filename().to_string_lossy(), entry.into());
             self.textures.insert(name.to_string(), (entry.clone(), entry_token));

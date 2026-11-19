@@ -1,0 +1,5 @@
+widget = { size = { 10 20 } }
+widget = { size { 10 20 } }
+textbox = { text "Printed text" }
+icon = { mipmaplodbias = 1.8 }
+icon = { mipmaplodbias = -1 }

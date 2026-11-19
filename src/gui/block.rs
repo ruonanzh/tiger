@@ -113,7 +113,8 @@ impl GuiBlock {
             }
         }
 
-        for item in block.iter_items() {
+        let mut items = block.iter_items().peekable();
+        while let Some(item) = items.next() {
             match state {
                 Expecting::Field => {
                     if let BlockItem::Field(Field(key, cmp, bv)) = item {
@@ -216,6 +217,33 @@ impl GuiBlock {
                             state = Expecting::SubstBlock;
                         } else if key_lc == "blockoverride" {
                             state = Expecting::BlockOverride;
+                        } else if Game::is_vic3()
+                            && !key.is_quoted()
+                            && let Ok(prop) = WidgetProperty::try_from(&key_lc)
+                            && let Some(value) = match (prop, items.peek()) {
+                                (
+                                    WidgetProperty::size
+                                    | WidgetProperty::margin
+                                    | WidgetProperty::position,
+                                    Some(BlockItem::Block(block)),
+                                ) => {
+                                    if block.iter_values().count() != 2 {
+                                        err(ErrorKey::Gui)
+                                            .msg("expected 2 numeric or percentage components")
+                                            .loc(block)
+                                            .push();
+                                    }
+                                    Some(BV::Block(block.clone()))
+                                }
+                                (
+                                    WidgetProperty::text | WidgetProperty::default_format,
+                                    Some(BlockItem::Value(value)),
+                                ) if value.is_quoted() => Some(BV::Value(value.clone())),
+                                _ => None,
+                            }
+                        {
+                            items.next();
+                            gui.items.push(GuiItem::Property(prop, key.clone(), value));
                         } else {
                             warn(ErrorKey::Gui).msg("unexpected value").loc(key).push();
                         }

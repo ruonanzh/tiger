@@ -21,9 +21,13 @@ pub fn lookup_modif(name: &Token, data: &Everything, warn: Option<Severity>) -> 
     if data.item_exists_lc(Item::ModifierTypeDefinition, &name_lc) {
         return kind.or_else(|| Some(lookup_modif_prefix(name)));
     } else if let Some(sev) = warn {
-        let info = kind
-            .and(Some("You can create it and the game engine will apply the modifier"))
-            .unwrap_or("You can create it and the modifier will appear in game, but the engine will not apply any effect");
+        let info = if MODIF_MAP.contains_key(&name_lc) {
+            "This key appears in the known engine modifier list. Check its definition in the effective load set."
+        } else if kind.is_some() {
+            "This key matches a recognized generated modifier shape. Check its provider and definition in the effective load set."
+        } else {
+            "Tiger does not recognize this modifier shape. Check its provider and use in the effective load set."
+        };
         report(ErrorKey::MissingItem, sev)
             .msg("modifier type definition does not exist")
             .info(info)
@@ -1397,7 +1401,7 @@ const MODIF_FLOW_TABLE: &[(ModifKinds, ModifKinds)] = &[
         ModifKinds::Building
             // Direct nodes
             .union(ModifKinds::Goods),
-        // Does not flow to Unit, despite usage in vanilla.
+        // Building-to-Unit propagation is unverified for the application points used in vanilla.
     ),
     (ModifKinds::InterestGroup, ModifKinds::InterestGroup),
     (ModifKinds::Market, ModifKinds::Market),

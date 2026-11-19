@@ -538,7 +538,7 @@ pub fn validate_effect_control(
     let sc = display_sc.as_mut().unwrap_or(&mut *original_sc);
 
     if caller == "if" || caller == "else_if" {
-        vd.req_field_warn("limit");
+        vd.req_conditional_limit(caller.as_str());
     }
 
     #[cfg(feature = "jomini")]

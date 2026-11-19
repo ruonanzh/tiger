@@ -121,8 +121,24 @@ fn validate_inner(
             if let Some(value) = bv.expect_value() {
                 #[cfg(not(feature = "imperator"))]
                 if !value.is("yes") && !value.is("no") {
-                    let msg = "expected yes or no";
-                    warn(ErrorKey::Validation).msg(msg).loc(value).push();
+                    if crate::Game::is_vic3() && token.is("round") && value.is("1") {
+                        warn(ErrorKey::Validation)
+                            .weak()
+                            .msg("round = 1 uses an undocumented numeric argument")
+                            .info("The documented form uses yes or no. Verify the intended behavior before changing it.")
+                            .loc(value)
+                            .push();
+                    } else if crate::Game::is_vic3() && token.is("floor") && value.is_number() {
+                        warn(ErrorKey::Validation)
+                            .weak()
+                            .msg("floor expects yes or no")
+                            .info("Use floor = yes for rounding down. If the intent is a lower bound, use min.")
+                            .loc(value)
+                            .push();
+                    } else {
+                        let msg = "expected yes or no";
+                        warn(ErrorKey::Validation).msg(msg).loc(value).push();
+                    }
                 }
                 #[cfg(feature = "imperator")]
                 if !token.is("round") && !value.is("yes") && !value.is("no") {
@@ -299,7 +315,7 @@ fn validate_if(
 ) {
     let mut side_effects = false;
     let mut vd = Validator::new(block, data);
-    vd.req_field_warn("limit");
+    vd.req_conditional_limit(key.as_str());
     vd.field_validated_block("limit", |block, data| {
         side_effects |= validate_trigger(block, data, sc, Tooltipped::No);
     });
@@ -399,6 +415,39 @@ pub fn validate_script_value(bv: &BV, data: &Everything, sc: &mut ScopeContext) 
 #[allow(dead_code)]
 pub fn validate_script_value_no_breakdown(bv: &BV, data: &Everything, sc: &mut ScopeContext) {
     validate_bv_with_mode(bv, data, sc, ValidationMode::NoBreakdown);
+}
+
+#[cfg(feature = "vic3")]
+pub(crate) fn validate_vic3_button_ai_chance(bv: &BV, data: &Everything, sc: &mut ScopeContext) {
+    if let BV::Block(block) = bv
+        && (block.has_key("base") || block.has_key("modifier"))
+    {
+        let mut vd = Validator::new(block, data);
+        let has_base = vd.field_validated("base", validate_non_dynamic_script_value);
+        vd.multi_field_validated_block_sc("modifier", sc, |block, data, sc| {
+            let mut vd = Validator::new(block, data);
+            vd.req_field("trigger");
+            vd.req_field("add");
+            vd.field_trigger("trigger", Tooltipped::No, sc);
+            vd.field_script_value_no_breakdown("add", sc);
+        });
+        // Some mods combine weight fields with script-value operations.
+        if block.iter_fields().any(|field| {
+            matches!(field.key().as_str(), "value" | "if" | "else_if" | "else" | "switch")
+        }) {
+            tips(ErrorKey::Logic)
+                .weak()
+                .msg("scripted button AI chance combines weight fields with script-value operations")
+                .info("Check how the game evaluates this combination if the resulting weight matters.")
+                .loc(block)
+                .push();
+        }
+        // Keep validating the operations without assuming their evaluation order.
+        let have_value = if has_base { TriBool::Maybe } else { TriBool::False };
+        validate_inner(vd, block, data, sc, have_value, ValidationMode::NoBreakdown);
+    } else {
+        validate_script_value_no_breakdown(bv, data, sc);
+    }
 }
 
 #[cfg(feature = "vic3")]

@@ -159,6 +159,7 @@ impl DataBinding {
             } else {
                 result.push(Code {
                     name: body_code.name.clone(),
+                    parenthesized: body_code.parenthesized,
                     arguments: body_code
                         .arguments
                         .iter()

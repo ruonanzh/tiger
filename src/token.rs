@@ -157,17 +157,27 @@ pub(crate) fn bump(s: &str) -> &'static str {
 pub struct Token {
     s: &'static str,
     pub loc: Loc,
+    quoted: bool,
 }
 
 impl Token {
     #[must_use]
     pub fn new(s: &str, loc: Loc) -> Self {
-        Token { s: bump(s), loc }
+        Token { s: bump(s), loc, quoted: false }
     }
 
     #[must_use]
     pub fn from_static_str(s: &'static str, loc: Loc) -> Self {
-        Token { s, loc }
+        Token { s, loc, quoted: false }
+    }
+
+    pub(crate) fn with_quotes(mut self) -> Self {
+        self.quoted = true;
+        self
+    }
+
+    pub(crate) fn is_quoted(&self) -> bool {
+        self.quoted
     }
 
     /// Create a `Token` from a substring of the given `Token`.
@@ -176,7 +186,7 @@ impl Token {
     where
         R: RangeBounds<usize> + SliceIndex<str, Output = str>,
     {
-        Token { s: &self.s[range], loc }
+        Token { s: &self.s[range], loc, quoted: false }
     }
 
     /// Create a `Token` from a subtring of the given `Token`,
@@ -208,7 +218,7 @@ impl Token {
                 break;
             }
         }
-        Token { s: &self.s[range], loc }
+        Token { s: &self.s[range], loc, quoted: false }
     }
 
     pub fn as_str(&self) -> &'static str {
@@ -493,7 +503,7 @@ impl Borrow<str> for &Token {
 
 impl From<Loc> for Token {
     fn from(loc: Loc) -> Self {
-        Token { s: "", loc }
+        Token { s: "", loc, quoted: false }
     }
 }
 

@@ -389,7 +389,7 @@ pub fn validate_create_ship(
 }
 
 pub fn validate_create_character(
-    key: &Token,
+    _key: &Token,
     block: &Block,
     _data: &Everything,
     sc: &mut ScopeContext,
@@ -402,14 +402,6 @@ pub fn validate_create_character(
     if block.has_key("name") {
         vd.ban_field("first_name", || "characters without `name`");
         vd.ban_field("last_name", || "characters without `name`");
-    } else if block.has_key("first_name") {
-        if !block.has_key("last_name") {
-            let msg = "character has `first_name` but no `last_name`";
-            warn(ErrorKey::Validation).msg(msg).loc(key).push();
-        }
-    } else if block.has_key("last_name") {
-        let msg = "character has `last_name` but no `first_name`";
-        warn(ErrorKey::Validation).msg(msg).loc(key).push();
     }
     vd.field_validated_value("culture", |_, mut vd| {
         vd.maybe_is("primary_culture");

@@ -15,6 +15,7 @@ const DDS_HEADER_SIZE: usize = 124;
 const DDS_HEIGHT_OFFSET: usize = 12;
 const DDS_WIDTH_OFFSET: usize = 16;
 const DDS_PIXELFORMAT_FLAGS_OFFSET: usize = 80;
+const DDS_FOURCC_OFFSET: usize = 84;
 
 fn from_le32(buffer: &[u8], offset: usize) -> u32 {
     u32::from(buffer[offset])
@@ -111,6 +112,7 @@ impl FileHandler<DdsInfo> for DdsFiles {
 pub struct DdsInfo {
     entry: FileEntry,
     compressed: bool,
+    fourcc: [u8; 4],
     width: u32,
     height: u32,
 }
@@ -120,6 +122,7 @@ impl DdsInfo {
         Self {
             entry,
             compressed: (from_le32(header, DDS_PIXELFORMAT_FLAGS_OFFSET) & 0x04) != 0,
+            fourcc: header[DDS_FOURCC_OFFSET..DDS_FOURCC_OFFSET + 4].try_into().unwrap(),
             width: from_le32(header, DDS_WIDTH_OFFSET),
             height: from_le32(header, DDS_HEIGHT_OFFSET),
         }
@@ -127,6 +130,16 @@ impl DdsInfo {
 
     fn validate(&self) {
         if self.compressed && !(self.width.is_multiple_of(4) || self.height.is_multiple_of(4)) {
+            if crate::Game::is_vic3() {
+                let fourcc = self.fourcc.escape_ascii();
+                let msg = format!(
+                    "DDS header marks this image as compressed: FourCC {fourcc}, {}x{}",
+                    self.width, self.height
+                );
+                let info = "Neither dimension is divisible by 4. Check for possible block alignment or scaling artifacts.";
+                warn(ErrorKey::ImageSize).msg(msg).info(info).loc(&self.entry).push();
+                return;
+            }
             let msg = "compressed DDS must have width and height divisible by 4";
             let info = format!(
                 "DDS file is {}x{}, which can cause scaling problems and graphical artifacts",

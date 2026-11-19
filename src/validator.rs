@@ -17,10 +17,10 @@ use crate::lowercase::Lowercase;
 use crate::report::fatal;
 use crate::report::{ErrorKey, Severity, report};
 use crate::scopes::Scopes;
-#[cfg(feature = "vic3")]
-use crate::script_value::validate_scripted_progress;
 #[cfg(feature = "jomini")]
 use crate::script_value::{validate_script_value, validate_script_value_no_breakdown};
+#[cfg(feature = "vic3")]
+use crate::script_value::{validate_scripted_progress, validate_vic3_button_ai_chance};
 use crate::special_tokens::SpecialTokens;
 use crate::token::Token;
 use crate::tooltipped::Tooltipped;
@@ -171,6 +171,28 @@ impl<'a> Validator<'a> {
             report(ErrorKey::Validation, sev).msg(msg).loc(self.block).push();
         }
         count == 1
+    }
+
+    /// Warn about a missing condition without claiming how Victoria 3 executes the branch.
+    pub fn req_conditional_limit(&mut self, branch: &str) {
+        if !crate::Game::is_vic3() {
+            self.req_field_warn("limit");
+        } else if !self.check_key("limit") {
+            let msg = format!("`{branch}` has no limit");
+            let info = match branch {
+                "else_if" => "Verify branch behavior. For an unconditional fallback, use else.",
+                "trigger_else_if" => {
+                    "Verify branch behavior. For an unconditional fallback, use trigger_else."
+                }
+                _ => "Verify whether a condition was intended and how the branch runs without it.",
+            };
+            report(ErrorKey::FieldMissing, Severity::Warning.at_most(self.max_severity))
+                .weak()
+                .msg(msg)
+                .info(info)
+                .loc(self.block)
+                .push();
+        }
     }
 
     /// Require field `name` to be present in the block, and warn if it isn't there.
@@ -1033,6 +1055,14 @@ impl<'a> Validator<'a> {
         self.field_check(name, AllowInject::Yes, |_, bv| {
             // TODO: pass max_severity value down
             validate_script_value_no_breakdown(bv, self.data, sc);
+        })
+    }
+
+    /// Validate a Victoria 3 scripted button weight, allowing injected overrides.
+    #[cfg(feature = "vic3")]
+    pub fn field_vic3_button_ai_chance(&mut self, sc: &mut ScopeContext) -> bool {
+        self.field_check("ai_chance", AllowInject::Yes, |_, bv| {
+            validate_vic3_button_ai_chance(bv, self.data, sc);
         })
     }
 

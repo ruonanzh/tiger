@@ -714,14 +714,58 @@ impl Fileset {
         }
     }
 
+    fn missing_file_candidates(&self, file: &str) -> Vec<String> {
+        let file = file.strip_prefix('/').unwrap_or(file);
+        let mut candidates: Vec<_> = self
+            .ordered_files
+            .iter()
+            .filter_map(|entry| entry.path.to_str())
+            .filter(|path| {
+                let mut actual = path.split(std::path::is_separator);
+                file.split('/').all(|part| {
+                    actual.next().is_some_and(|candidate| candidate.eq_ignore_ascii_case(part))
+                }) && actual.next().is_none()
+            })
+            .map(|path| path.replace(std::path::MAIN_SEPARATOR, "/"))
+            .collect();
+
+        // Mixed Noto family names in fonts.font can refer to either existing family.
+        if let Some((directory, name)) = file.strip_prefix("fonts/").and_then(|s| s.split_once('/'))
+        {
+            for (in_directory, in_name) in [("NotoSans", "NotoSerif"), ("NotoSerif", "NotoSans")] {
+                if directory == in_directory
+                    && let Some(suffix) = name.strip_prefix(in_name)
+                {
+                    for candidate in [
+                        format!("fonts/{in_name}/{name}"),
+                        format!("fonts/{in_directory}/{in_directory}{suffix}"),
+                    ] {
+                        if self.exists(&candidate) {
+                            candidates.push(candidate);
+                        }
+                    }
+                }
+            }
+        }
+        candidates.sort_unstable();
+        candidates.dedup();
+        candidates
+    }
+
     pub fn verify_exists_implied(&self, file: &str, t: &Token, max_sev: Severity) {
         self.mark_used(&file.replace("//", "/"));
         if !self.exists(file) {
             let msg = format!("file {file} does not exist");
-            report(ErrorKey::MissingFile, Item::File.severity().at_most(max_sev))
-                .msg(msg)
-                .loc(t)
-                .push();
+            let diagnostic =
+                report(ErrorKey::MissingFile, Item::File.severity().at_most(max_sev)).msg(msg);
+            let candidates =
+                if Game::is_vic3() { self.missing_file_candidates(file) } else { Vec::new() };
+            let diagnostic = if candidates.is_empty() {
+                diagnostic
+            } else {
+                diagnostic.info(format!("Existing path candidates: {}", candidates.join(", ")))
+            };
+            diagnostic.loc(t).push();
         }
     }
 

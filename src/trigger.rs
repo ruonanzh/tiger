@@ -185,7 +185,7 @@ pub fn validate_trigger_internal(
         || (Game::is_hoi4() && (caller == "if" || caller == "else_if" || caller == "else"))
     {
         if caller != "trigger_else" && caller != "else" {
-            vd.req_field_warn("limit");
+            vd.req_conditional_limit(caller.as_str());
         }
         vd.field_validated_key_block("limit", |key, block, data| {
             if caller == "trigger_else" {
@@ -816,6 +816,13 @@ fn match_trigger_bv(
                 // TODO HOI4
             } else {
                 bv.expect_value();
+            }
+        }
+        #[cfg(feature = "vic3")]
+        Trigger::CompareItem(i) => {
+            must_be_eq = false;
+            if let Some(token) = bv.expect_value() {
+                data.verify_exists_max_sev(*i, token, max_sev);
             }
         }
         Trigger::Item(i) => {
@@ -1983,6 +1990,9 @@ pub enum Trigger {
     /// value is from a list given here that can be compared
     #[cfg(any(feature = "ck3", feature = "vic3", feature = "eu5"))]
     CompareChoice(&'static [&'static str]),
+    /// Compare against a named item of the given type.
+    #[cfg(feature = "vic3")]
+    CompareItem(Item),
     /// like `CompareChoice` but value can also be just a number
     #[cfg(any(feature = "vic3", feature = "eu5"))]
     CompareChoiceOrNumber(&'static [&'static str]),

@@ -9,7 +9,7 @@ use crate::game::Game;
 use crate::parse::cob::Cob;
 use crate::parse::ignore::{IgnoreFilter, IgnoreSize, parse_comment};
 use crate::report::register_ignore_filter;
-use crate::report::{ErrorKey, untidy, warn};
+use crate::report::{ErrorKey, tips, untidy, warn};
 use crate::token::{Loc, Token};
 
 fn is_key_char(c: char) -> bool {
@@ -53,7 +53,7 @@ impl LocaParser {
             if chars.peek() == Some(&'\u{feff}') {
                 // Second BOM is file content, not header, and should be reported with line number
                 loc.line = 1;
-                let msg = "double BOM in localization file";
+                let msg = "double BOM (U+FEFF) in localization file";
                 let info = "This will make the game engine skip the whole file.";
                 warn(ErrorKey::Encoding).strong().msg(msg).info(info).loc(loc).push();
                 offset += '\u{feff}'.len_utf8();
@@ -554,8 +554,8 @@ impl<'a> ValueParser<'a> {
                             warn(ErrorKey::Localization).msg(msg).info(info).loc(self.loc).push();
                         }
                         '\u{feff}' => {
-                            let msg = "found unicode BOM in middle of file";
-                            warn(ErrorKey::ParseError).strong().msg(msg).loc(loc).push();
+                            let msg = "found U+FEFF (UTF-8 BOM) in the middle of the file";
+                            warn(ErrorKey::ParseError).strong().msg(msg).loc(self.loc).push();
                         }
                         _ => (),
                     }
@@ -609,9 +609,9 @@ impl<'a> ValueParser<'a> {
         }
         let name = text.take_to_token();
         if self.peek() == Some('(') {
-            Code { name, arguments: self.parse_code_args() }
+            Code { name, arguments: self.parse_code_args(), parenthesized: true }
         } else {
-            Code { name, arguments: Vec::new() }
+            Code { name, arguments: Vec::new(), parenthesized: false }
         }
     }
 
@@ -703,6 +703,8 @@ impl<'a> ValueParser<'a> {
                 InValue(String, String, Loc, usize),
             }
             let mut state = State::InKey(String::new());
+            let mut tooltip_value_start = None;
+            let mut dynamic_value = false;
             while let Some(c) = self.peek() {
                 if c.is_whitespace() {
                     break;
@@ -714,6 +716,8 @@ impl<'a> ValueParser<'a> {
                             if s.is_empty() {
                                 self.unexpected_char("expected markup key", ErrorKey::Markup);
                             }
+                            tooltip_value_start = Some((self.content_idx, self.offset + 1));
+                            dynamic_value = false;
                             state = State::InValue(s.clone(), String::new(), self.loc, 0);
                         } else if c == ';' {
                             if s.is_empty() {
@@ -734,8 +738,31 @@ impl<'a> ValueParser<'a> {
                     }
                     State::InValue(key, value, loc, bracecount) => {
                         if c == ':' {
-                            value.push(c);
-                            self.unexpected_char("expected `;`", ErrorKey::Markup);
+                            let text = self.content[self.content_idx].as_str();
+                            if Game::is_vic3()
+                                && dynamic_value
+                                && key.eq_ignore_ascii_case("tooltip")
+                                && value.starts_with(',')
+                                && value.len() > 1
+                                && text[self.offset + 1..]
+                                    .chars()
+                                    .next()
+                                    .is_some_and(char::is_whitespace)
+                                && let Some((idx, start)) = tooltip_value_start
+                                && idx == self.content_idx
+                            {
+                                let target = &text[start..self.offset];
+                                tips(ErrorKey::Markup)
+                                    .weak()
+                                    .msg(format!(
+                                        "dynamic tooltip target has a trailing colon: {target}"
+                                    ))
+                                    .loc(self.loc)
+                                    .push();
+                            } else {
+                                value.push(c);
+                                self.unexpected_char("expected `;`", ErrorKey::Markup);
+                            }
                         } else if c == ';' {
                             if key.eq_ignore_ascii_case("tooltip") {
                                 self.handle_tooltip(value, *loc);
@@ -762,6 +789,7 @@ impl<'a> ValueParser<'a> {
                             // | is allowed because in some tooltips it separates components of the tooltip tag
                             value.push(c);
                         } else if c == '[' {
+                            dynamic_value = true;
                             // Generating part of the markup with a code block is valid.
                             // Assume (hope) that it generates the current value and not some random chunk
                             // of markup. The next thing we see ought to be a comma or a space.
@@ -776,6 +804,12 @@ impl<'a> ValueParser<'a> {
                     self.next_char();
                 }
             }
+            // Leave the next opening tag for the outer parser.
+            let adjacent_tag = Game::is_vic3()
+                && matches!(&state, State::InKey(key) if !key.is_empty())
+                && self.peek() == Some('#')
+                && self.content[self.content_idx].as_str()[self.offset + 1..]
+                    .starts_with(|c: char| c.is_ascii_alphabetic());
             // Clean up leftover state at end
             match state {
                 State::InKey(_) => {
@@ -793,6 +827,9 @@ impl<'a> ValueParser<'a> {
                         self.value.push(LocaValue::Markup);
                     }
                 }
+            }
+            if adjacent_tag {
+                return;
             }
             if self.peek().is_none_or(char::is_whitespace) {
                 self.next_char();

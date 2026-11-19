@@ -464,7 +464,7 @@ impl Iterator for Lexer<'_> {
                             escaped = true;
                             continue;
                         } else if c == '"' && !escaped {
-                            let token = id.take_to_token();
+                            let token = id.take_to_token().with_quotes();
                             let close_loc = self.loc;
                             self.consume();
 
@@ -679,7 +679,11 @@ impl Iterator for Lexer<'_> {
                 }
                 _ => {
                     self.apply_line_ignores();
-                    let msg = format!("unrecognized character `{c}`");
+                    let msg = if c == '\u{feff}' {
+                        "unrecognized U+FEFF (UTF-8 BOM); only one BOM is allowed at the start of the file".to_string()
+                    } else {
+                        format!("unrecognized character `{c}`")
+                    };
                     err(ErrorKey::ParseError).msg(msg).loc(self.loc).push();
                     self.consume();
                 }

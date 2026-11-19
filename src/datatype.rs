@@ -58,6 +58,7 @@ pub struct CodeChain {
 pub struct Code {
     pub name: Token,
     pub arguments: Vec<CodeArg>,
+    pub(crate) parenthesized: bool,
 }
 
 /// `CodeArg` represents a single argument of a [`Code`].
@@ -404,25 +405,6 @@ pub fn validate_datatypes(
             rtype = Datatype::Imperator(ImperatorDatatype::Country);
         }
 
-        // In vic3, game concepts are unadorned, like [concept_ideology]
-        // Each concept also generates a [concept_ideology_desc]
-        #[cfg(feature = "vic3")]
-        if Game::is_vic3()
-            && !found
-            && is_first
-            && is_last
-            && code.name.as_str().starts_with("concept_")
-        {
-            found = true;
-            if let Some(concept) = code.name.as_str().strip_suffix("_desc") {
-                data.verify_exists_implied(Item::GameConcept, concept, &code.name);
-            } else {
-                data.verify_exists(Item::GameConcept, &code.name);
-            }
-            args = Args::Args(&[]);
-            rtype = Datatype::CString;
-        }
-
         // In eu5, game concepts are unadorned, like [manpower]
         // Each concept also generates a [manpower_icon] and [manpower_with_icon]
         #[cfg(feature = "eu5")]
@@ -494,6 +476,32 @@ pub fn validate_datatypes(
             found = true;
             args = Args::Args(&[]);
             rtype = datatype_from_scopes(scopes);
+        }
+
+        // Vic3 exposes bare concept IDs and their generated `_desc` keys.
+        #[cfg(feature = "vic3")]
+        if Game::is_vic3() && !found && is_first && is_last {
+            let name = code.name.as_str();
+            let parent = name.strip_suffix("_desc");
+            let exists = data.item_exists(Item::GameConcept, name)
+                || parent.is_some_and(|id| data.item_exists(Item::GameConcept, id));
+            if code.parenthesized && exists {
+                let msg = format!("game concept {name} must be used without parentheses");
+                warn(ErrorKey::Datafunctions).msg(msg).loc(&code.name).push();
+                return Datatype::Unknown;
+            }
+            if !code.parenthesized && (exists || name.starts_with("concept_")) {
+                if !exists {
+                    if let Some(parent) = parent {
+                        data.verify_exists_implied(Item::GameConcept, parent, &code.name);
+                    } else {
+                        data.verify_exists(Item::GameConcept, &code.name);
+                    }
+                }
+                found = true;
+                args = Args::Args(&[]);
+                rtype = Datatype::CString;
+            }
         }
 
         // If `code.name` is not found yet, then it can be some passed-in scope we don't know about.

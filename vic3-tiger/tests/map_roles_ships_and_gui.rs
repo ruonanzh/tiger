@@ -118,10 +118,17 @@ widget = {
             if [map, roles].contains(&path.as_str()) && key == "choice" {
                 choices.push((path, loc.line));
             } else if path == ships && report.msg == "modifier type definition does not exist" {
-                ship_kinds.push((
-                    loc.line,
-                    report.info.as_deref().unwrap().contains("will apply the modifier"),
-                ));
+                let info = report.info.as_deref().unwrap();
+                let kind = if info.contains("known engine modifier list") {
+                    "known"
+                } else if info.contains("recognized generated modifier shape") {
+                    "generated"
+                } else if info.contains("does not recognize this modifier shape") {
+                    "unrecognized"
+                } else {
+                    panic!("unexpected modifier classification at line {}: {info}", loc.line);
+                };
+                ship_kinds.push((loc.line, kind));
             } else if path == gui {
                 gui_reports.push((loc.line, report.msg.clone()));
             }
@@ -142,7 +149,15 @@ widget = {
     ship_kinds.sort_unstable();
     assert_eq!(
         ship_kinds,
-        [(3, true), (4, true), (5, true), (6, true), (7, true), (8, true), (9, false)],
+        [
+            (3, "known"),
+            (4, "known"),
+            (5, "known"),
+            (6, "known"),
+            (7, "known"),
+            (8, "known"),
+            (9, "unrecognized")
+        ],
     );
 
     for (line, fragment) in [

@@ -507,7 +507,7 @@ const TRIGGER: &[(Scopes, &str, Trigger)] = &[
     (
         Scopes::Country,
         "has_attitude",
-        Block(&[("who", Scope(Scopes::Country)), ("attitude", Item(Item::Attitude))]),
+        Block(&[("who", Scope(Scopes::Country)), ("attitude", CompareItem(Item::Attitude))]),
     ),
     (Scopes::BattleSide, "has_battle_condition", Item(Item::BattleCondition)),
     (
@@ -1204,7 +1204,7 @@ const TRIGGER: &[(Scopes, &str, Trigger)] = &[
     (
         Scopes::Character.union(Scopes::InterestGroup).union(Scopes::PoliticalMovement),
         "law_enactment_stance",
-        Block(&[("law", Scope(Scopes::LawType)), ("value", CompareChoice(STANCES))]),
+        Block(&[("law", Scope(Scopes::LawType)), ("value", CompareChoiceOrNumber(STANCES))]),
     ),
     (Scopes::Law, "law_is_available", Boolean),
     (

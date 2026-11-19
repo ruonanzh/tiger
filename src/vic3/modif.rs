@@ -61,15 +61,28 @@ impl ModifKinds {
             } else {
                 self.to_string()
             };
-            let msg = format!("`{token}` is a modifier for {other} and will not flow from {from}");
-            let info = if self.is_empty() {
+            let needs_verification = !self.is_empty()
+                && (other.intersects(Self::Ship)
+                    || (self.intersects(Self::Building) && other.intersects(Self::Unit)));
+            let msg = if needs_verification {
+                format!(
+                    "`{token}` is a modifier for {other}; propagation from {from} needs verification"
+                )
+            } else {
+                format!("`{token}` is a modifier for {other} and will not flow from {from}")
+            };
+            let info = if needs_verification {
+                "Tiger's known modifier flow has no matching path. Verify the application point and target.".to_string()
+            } else if self.is_empty() {
                 format!("there are no valid modifiers for {from}")
             } else if let Some(suggest) = modif_flow_suggest(token.as_str(), valid_kinds) {
                 format!("a similar modifier exists that would flow `{suggest}`")
             } else {
                 format!("valid modifiers are for {valid_kinds}")
             };
-            let mut report = report(ErrorKey::Modifiers, sev)
+            let diagnostic = report(ErrorKey::Modifiers, sev);
+            let diagnostic = if needs_verification { diagnostic.weak() } else { diagnostic };
+            let mut report = diagnostic
                 .msg(msg)
                 .info(info)
                 .wiki("https://vic3.paradoxwikis.com/Modifier_types#Modifier_type_flow")

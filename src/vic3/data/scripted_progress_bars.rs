@@ -46,8 +46,8 @@ impl DbKind for ScriptedProgressBar {
         vd.field_bool("is_inverted");
 
         vd.field_numeric("start_value");
-        vd.field_numeric("min_value");
-        vd.field_numeric("max_value");
+        vd.field_script_value_no_breakdown("min_value", &mut sc);
+        vd.field_script_value_no_breakdown("max_value", &mut sc);
 
         vd.field_list_numeric_exactly("color", 4);
         let mut custom_look = block.get_field("color").is_some();

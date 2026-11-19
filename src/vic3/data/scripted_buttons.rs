@@ -49,7 +49,7 @@ impl DbKind for ScriptedButton {
         vd.field_trigger("possible", Tooltipped::Yes, &mut sc);
         vd.field_effect("effect", Tooltipped::Yes, &mut sc);
 
-        vd.field_script_value_no_breakdown("ai_chance", &mut sc);
+        vd.field_vic3_button_ai_chance(&mut sc);
 
         // undocumented
 
