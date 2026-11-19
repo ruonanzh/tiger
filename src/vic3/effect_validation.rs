@@ -16,6 +16,31 @@ use crate::vic3::data::buildings::BuildingType;
 use crate::vic3::tables::misc::{LOBBY_FORMATION_REASON, STATE_TYPES, STRATA, TARIFF_LEVELS};
 use crate::vic3::validate::validate_treaty_article;
 
+pub fn validate_exile_character(
+    _key: &Token,
+    bv: &BV,
+    data: &Everything,
+    sc: &mut ScopeContext,
+    _tooltipped: Tooltipped,
+) {
+    match bv {
+        BV::Value(token) => {
+            validate_target(token, data, sc, Scopes::Bool);
+        }
+        BV::Block(block) => {
+            let mut vd = Validator::new(block, data);
+            vd.set_case_sensitive(false);
+            vd.field_item("exile_pool", Item::RegionalExilePool);
+            vd.field_bool("value");
+            let months = vd.field_integer("months");
+            let years = vd.field_integer("years");
+            if months || years {
+                vd.req_field("exile_pool");
+            }
+        }
+    }
+}
+
 pub fn validate_activate_production_method(
     _key: &Token,
     _block: &Block,

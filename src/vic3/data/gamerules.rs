@@ -20,8 +20,7 @@ impl GameRule {
     }
 }
 
-/// LAST UPDATED VIC3 VERSION 1.12.2
-/// Taken from `common/game_rules/_game_rules.info`
+/// Documented flags are listed in `common/game_rules/game_rules.md`.
 const SIMPLE_GAME_RULE_FLAGS: &[&str] = &[
     "blocks_achievements",
     "lenient_ai",
@@ -30,6 +29,10 @@ const SIMPLE_GAME_RULE_FLAGS: &[&str] = &[
     "high_ai_aggression",
     "no_subject_flags",
     "no_subject_map_color",
+    "infamy_generation_very_low",
+    "infamy_generation_low",
+    "infamy_generation_high",
+    "infamy_generation_very_high",
     // undocumented flags follow
     "autonomous_investment",
     "no_pop_consolidation",

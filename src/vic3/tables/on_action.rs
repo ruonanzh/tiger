@@ -392,6 +392,7 @@ pub const ON_ACTION_SCOPES: &str = "
 		root = treaty
 		withdrawing_country = country
 		non_withdrawing_country = country
+		partial_withdrawal = bool
 	}
 	on_country_broke_treaty = on_country_withdrawn_from_treaty
 	on_treaty_dissolved = {

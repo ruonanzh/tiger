@@ -1390,7 +1390,7 @@ const TRIGGER: &[(Scopes, &str, Trigger)] = &[
         "market_trade",
         Block(&[
             ("?target", Scope(Scopes::Market)),
-            ("?goods", Item(Item::Goods)),
+            ("?goods", ScopeOrItem(Scopes::Goods, Item::Goods)),
             ("value", CompareValue),
         ]),
     ),
@@ -2056,12 +2056,28 @@ static TRIGGER_COMPLEX_MAP: LazyLock<TigerHashMap<&'static str, (Scopes, Argumen
 /// LAST UPDATED VIC3 VERSION 1.8.4
 /// See `triggers.log` from the game data dumps
 /// `(inscopes, trigger name, argtype, outscopes)`
-/// Currently only works with single argument triggers
-// TODO Update argtype when vic3 updated to 1.5+
 const TRIGGER_COMPLEX: &[(Scopes, &str, ArgumentValue, Scopes)] = {
     use crate::item::Item;
     use ArgumentValue::*;
+    const TREATY: Scopes = Scopes::Treaty.union(Scopes::TreatyOptions);
     &[
+        (TREATY, "ai_ship_purchase_rejected_share", Scope(Scopes::Ship), Scopes::Value),
+        (TREATY, "ai_ship_purchase_value_multiplier", Scope(Scopes::Ship), Scopes::Value),
+        (TREATY, "ai_ship_sale_remaining_share", Scope(Scopes::Ship), Scopes::Value),
+        (Scopes::Strait, "fallout_for", Scope(Scopes::Country), Scopes::Value),
+        (Scopes::Strait, "military_fallout_for", Scope(Scopes::Country), Scopes::Value),
+        (Scopes::Strait, "only_allies_fallout_for", Scope(Scopes::Country), Scopes::Value),
+        (Scopes::Strait, "trade_fallout_for", Scope(Scopes::Country), Scopes::Value),
+        (Scopes::Country, "piracy_grievance_against", Scope(Scopes::Country), Scopes::Value),
+        (Scopes::Country, "strait_access_grievance_against", Scope(Scopes::Country), Scopes::Value),
+        (Scopes::Country, "strait_dependence_by", Scope(Scopes::Country), Scopes::Value),
+        (Scopes::Country, "strait_toll_grievance_against", Scope(Scopes::Country), Scopes::Value),
+        (Scopes::Country, "strait_trade_dependence_by", Scope(Scopes::Country), Scopes::Value),
+        (Scopes::Country, "size_weighted_won_battles_fraction", Scope(Scopes::War), Scopes::Value),
+        (Scopes::Country, "war_support_from_war_goals", Scope(Scopes::War), Scopes::Value),
+        (Scopes::all_but_none(), "variable_map", VariableMapKey, Scopes::all_but_none()),
+        (Scopes::None, "global_variable_map", VariableMapKey, Scopes::all_but_none()),
+        (Scopes::None, "local_variable_map", VariableMapKey, Scopes::all_but_none()),
         (
             Scopes::Country,
             "additional_war_exhaustion",

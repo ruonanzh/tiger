@@ -27,8 +27,9 @@ impl DbKind for FleetEntity {
     fn validate(&self, key: &Token, block: &Block, data: &Everything) {
         let mut vd = Validator::new(block, data);
 
-        data.verify_exists(Item::ShipType, key);
-        vd.field_item("ship_type", Item::ShipType);
+        if !vd.field_item("ship_type", Item::ShipType) {
+            data.verify_exists(Item::ShipType, key);
+        }
 
         vd.field_bool("default");
         vd.field_trigger_rooted("trigger", Tooltipped::No, Scopes::Country);

@@ -47,7 +47,7 @@ impl DbKind for FleetDiorama {
     fn validate(&self, _key: &Token, block: &Block, data: &Everything) {
         let mut vd = Validator::new(block, data);
 
-        vd.field_choice("group", &["fleet", "battle_side", "blockade"]);
+        vd.field_choice("group", &["fleet", "battle_side", "blockade", "port_bombardment"]);
         vd.field_numeric("random_offset");
         vd.field_validated_block("composition", |block, data| {
             let mut vd = Validator::new(block, data);

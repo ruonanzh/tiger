@@ -471,6 +471,8 @@ pub enum ArgumentValue {
     /// The value consists of multiple arguments separated by `|`
     #[cfg(feature = "eu5")]
     Multiple(&'static [ArgumentValue]),
+    #[cfg(feature = "vic3")]
+    VariableMapKey,
     /// The value can be anything
     UncheckedValue,
     /// This trigger no longer exists. Arguments are version and explanation

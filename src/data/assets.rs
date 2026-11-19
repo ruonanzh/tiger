@@ -20,7 +20,8 @@ use crate::validator::Validator;
 #[derive(Clone, Debug, Default)]
 #[allow(clippy::struct_field_names)]
 pub struct Assets {
-    assets: TigerHashMap<&'static str, Asset>,
+    assets: TigerHashMap<&'static str, TigerHashMap<&'static str, Asset>>,
+    asset_names: TigerHashSet<Token>,
     attributes: TigerHashSet<Token>,
     blend_shapes: TigerHashSet<Token>,
     musics: TigerHashSet<Token>,
@@ -30,39 +31,63 @@ pub struct Assets {
 impl Assets {
     pub fn load_item(&mut self, key: &Token, block: &Block) {
         if let Some(name) = block.get_field_value("name") {
-            if let Some(other) = self.assets.get(name.as_str())
+            // Vic3 allows distinct asset types to share a name. Keep the shared
+            // namespace for games whose asset lookup has always used names alone.
+            let assets = self.assets.entry(Self::asset_namespace(key.as_str())).or_default();
+            if let Some(other) = assets.get(name.as_str())
                 && other.key.loc.kind >= name.loc.kind
             {
                 dup_error(name, &other.key, "asset");
             }
-            self.assets.insert(name.as_str(), Asset::new(key.clone(), name.clone(), block.clone()));
+            assets.insert(name.as_str(), Asset::new(key.clone(), name.clone(), block.clone()));
+            self.asset_names.replace(name.clone());
         }
     }
 
     pub fn asset_exists(&self, key: &str) -> bool {
-        self.assets.contains_key(key)
+        self.asset_names.contains(key)
     }
 
     pub fn iter_asset_keys(&self) -> impl Iterator<Item = &Token> {
-        self.assets.values().map(|item| &item.name)
+        self.asset_names.iter()
+    }
+
+    fn asset_namespace(kind: &str) -> &str {
+        if Game::is_vic3() { kind } else { "" }
+    }
+
+    fn typed_asset_exists(&self, kind: &str, key: &str) -> bool {
+        self.assets
+            .get(Self::asset_namespace(kind))
+            .and_then(|items| items.get(key))
+            .is_some_and(|asset| asset.key.is(kind))
+    }
+
+    fn iter_typed_asset_keys<'a>(&'a self, kind: &'static str) -> impl Iterator<Item = &'a Token> {
+        self.assets
+            .get(Self::asset_namespace(kind))
+            .into_iter()
+            .flat_map(TigerHashMap::values)
+            .filter(move |asset| asset.key.is(kind))
+            .map(|asset| &asset.name)
     }
 
     #[cfg(feature = "jomini")]
     pub fn mesh_exists(&self, key: &str) -> bool {
-        if let Some(asset) = self.assets.get(key) { asset.key.is("pdxmesh") } else { false }
+        self.typed_asset_exists("pdxmesh", key)
     }
 
     #[cfg(feature = "jomini")]
     pub fn iter_mesh_keys(&self) -> impl Iterator<Item = &Token> {
-        self.assets.values().filter(|item| item.key.is("pdxmesh")).map(|item| &item.name)
+        self.iter_typed_asset_keys("pdxmesh")
     }
 
     pub fn entity_exists(&self, key: &str) -> bool {
-        if let Some(asset) = self.assets.get(key) { asset.key.is("entity") } else { false }
+        self.typed_asset_exists("entity", key)
     }
 
     pub fn iter_entity_keys(&self) -> impl Iterator<Item = &Token> {
-        self.assets.values().filter(|item| item.key.is("entity")).map(|item| &item.name)
+        self.iter_typed_asset_keys("entity")
     }
 
     pub fn blend_shape_exists(&self, key: &str) -> bool {
@@ -106,7 +131,7 @@ impl Assets {
     }
 
     pub fn validate(&self, data: &Everything) {
-        for item in self.assets.values() {
+        for item in self.assets.values().flat_map(TigerHashMap::values) {
             item.validate(data);
         }
     }
@@ -154,7 +179,7 @@ impl FileHandler<Option<Block>> for Assets {
     }
 
     fn finalize(&mut self) {
-        for asset in self.assets.values() {
+        for asset in self.assets.values().flat_map(TigerHashMap::values) {
             if asset.key.is("pdxmesh") {
                 for (key, block) in asset.block.iter_definitions() {
                     if key.is("blend_shape")
@@ -384,6 +409,9 @@ impl Asset {
         });
         vd.multi_field_validated_block("attach", |block, data| {
             let mut vd = Validator::new(block, data);
+            if Game::is_vic3() {
+                vd.field_value("name");
+            }
             vd.unknown_value_fields(|_, token| {
                 // TODO: what are the keys here?
                 data.verify_exists(Item::Asset, token);
@@ -466,7 +494,20 @@ fn validate_event(block: &Block, data: &Everything) {
     vd.field_bool("keep_entity");
     vd.field_bool("trigger_once");
     vd.field_bool("use_parent_nodes");
-    vd.field_integer("skip_forward");
+    if Game::is_vic3() {
+        if let Some(token) = vd.field_value("skip_forward") {
+            let is_whole_decimal = token.split_once('.').is_some_and(|(whole, fraction)| {
+                whole.is_integer()
+                    && !fraction.is("")
+                    && fraction.as_str().bytes().all(|digit| digit == b'0')
+            });
+            if !is_whole_decimal {
+                token.expect_integer();
+            }
+        }
+    } else {
+        vd.field_integer("skip_forward");
+    }
     vd.field_value("attachment_id"); // TODO
     vd.field_value("remove_attachment"); // TODO
     vd.field_item("entity", Item::Entity);

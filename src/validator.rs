@@ -433,6 +433,20 @@ impl<'a> Validator<'a> {
         })
     }
 
+    /// Expect an item key or a list of item keys. All keys must exist.
+    #[cfg(feature = "vic3")]
+    pub fn field_item_or_list(&mut self, name: &str, item: Item) -> bool {
+        let sev = self.max_severity;
+        self.field_check(name, AllowInject::Yes, |_, bv| match bv {
+            BV::Value(token) => self.data.verify_exists_max_sev(item, token, sev),
+            BV::Block(block) => {
+                for token in block.iter_values_warn() {
+                    self.data.verify_exists_max_sev(item, token, sev);
+                }
+            }
+        })
+    }
+
     /// Expect field `name`, if present, to be a variable reference.
     /// Expect no more than one `name` field in the block.
     /// Returns true iff the field is present.

@@ -54,7 +54,7 @@ pub fn validate_event(event: &Event, data: &Everything, sc: &mut ScopeContext) {
         tooltipped = Tooltipped::No;
     }
 
-    vd.field_item("dlc", Item::Dlc);
+    vd.field_item_or_list("dlc", Item::Dlc);
 
     vd.field_trigger("trigger", Tooltipped::No, sc);
     vd.field_validated_block_sc("weight_multiplier", sc, validate_modifiers_with_base);

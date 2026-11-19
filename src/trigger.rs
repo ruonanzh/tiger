@@ -1785,6 +1785,26 @@ fn validate_argument_internal(
         ArgumentValue::Identifier(kind) => {
             validate_identifier(arg, kind, Severity::Error);
         }
+        #[cfg(feature = "vic3")]
+        ArgumentValue::VariableMapKey => {
+            if let Some((name, key)) = arg.split_once('|')
+                && !name.is("")
+                && !key.is("")
+            {
+                validate_identifier(&name, "variable map name", Severity::Error);
+                validate_argument_internal(
+                    &key,
+                    ArgumentValue::Scope(Scopes::all_but_none()),
+                    data,
+                    sc,
+                );
+            } else {
+                err(ErrorKey::Validation)
+                    .msg("expected a variable map name and a key separated by `|`")
+                    .loc(arg)
+                    .push();
+            }
+        }
         ArgumentValue::UncheckedValue => (),
         #[cfg(feature = "ck3")]
         ArgumentValue::Removed(version, info) => {

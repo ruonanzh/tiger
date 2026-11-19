@@ -77,6 +77,8 @@ impl DbKind for TreatyArticle {
             "is_abandon_piracy",
             "can_be_renegotiated",
             "can_be_enforced",
+            "is_one_time",
+            "show_in_lens",
             "causes_state_transfer",
             "friendly",
             "giftable",
@@ -186,13 +188,9 @@ impl DbKind for TreatyArticle {
             });
         }
 
-        vd.field_trigger_rooted("visible", Tooltipped::No, Scopes::Country);
+        vd.field_trigger_builder("visible", Tooltipped::No, build_other_country_sc);
         vd.field_trigger_rooted("show_in_lens", Tooltipped::No, Scopes::Country);
-        vd.field_trigger_builder("possible", Tooltipped::Yes, |key| {
-            let mut sc = ScopeContext::new(Scopes::Country, key);
-            sc.define_name("other_country", Scopes::Country, key);
-            sc
-        });
+        vd.field_trigger_builder("possible", Tooltipped::Yes, build_other_country_sc);
         vd.multi_field_validated_block("requirement_to_maintain", |block, data| {
             let mut vd = Validator::new(block, data);
             vd.field_trigger_builder("trigger", Tooltipped::Yes, |key| {
@@ -308,9 +306,14 @@ impl DbKind for TreatyArticle {
     }
 }
 
-fn build_input_sc(key: &Token, input: &Token) -> ScopeContext {
+fn build_other_country_sc(key: &Token) -> ScopeContext {
     let mut sc = ScopeContext::new(Scopes::Country, key);
     sc.define_name("other_country", Scopes::Country, key);
+    sc
+}
+
+fn build_input_sc(key: &Token, input: &Token) -> ScopeContext {
+    let mut sc = build_other_country_sc(key);
     sc.define_name("article", Scopes::TreatyArticle, key);
     let input_scope = match input.as_str() {
         "goods" => Scopes::Goods,
@@ -320,6 +323,7 @@ fn build_input_sc(key: &Token, input: &Token) -> ScopeContext {
         "building_type" => Scopes::BuildingType,
         "law_type" => Scopes::LawType,
         "country" => Scopes::Country,
+        "ship" => Scopes::Ship,
         _ => {
             return sc;
         }
@@ -374,7 +378,7 @@ fn validate_ai(block: &Block, data: &Everything, required_inputs: &[Token], is_d
         }
     }
 
-    vd.field_list_choice("article_ai_usage", &["offer", "request"]);
+    vd.field_list_choice("article_ai_usage", &["offer", "request", "none"]);
     let categories = &[
         "economy",
         "trade",

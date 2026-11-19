@@ -81,6 +81,7 @@ impl DbKind for DiplomaticCatalyst {
             let mut vd = Validator::new(block, data);
             let mut sc = ScopeContext::new(Scopes::Country, key);
             sc.define_name("target_country", Scopes::Country, key);
+            sc.define_name("new_diplomatic_relation", Scopes::Bool, key);
             vd.field_choice(
                 "type",
                 &[

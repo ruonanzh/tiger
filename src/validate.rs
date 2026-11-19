@@ -504,6 +504,16 @@ pub fn validate_inside_iterator(
         if let Some(token) = vd.field_value("variable") {
             sc.replace_global_list_entry(token);
         }
+    } else if Game::is_vic3()
+        && (name == "key_in_variable_map"
+            || name == "key_in_local_variable_map"
+            || name == "key_in_global_variable_map")
+    {
+        vd.ban_field("list", || format!("{listtype}_in_list"));
+        vd.req_field("variable");
+        if let Some(token) = vd.field_value("variable") {
+            validate_identifier(token, "variable map name", Severity::Error);
+        }
     } else {
         vd.ban_field("list", || format!("{listtype}_in_list"));
         vd.ban_field("variable", || {

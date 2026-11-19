@@ -65,14 +65,7 @@ impl DbKind for JournalEntry {
         let mut outcome_sc = sc.clone();
         let mut outcome_country_sc = country_sc.clone();
         vd.field_item("group", Item::JournalEntryGroup);
-        vd.field_validated("dlc", |bv, data| match bv {
-            BV::Value(token) => data.verify_exists(Item::Dlc, token),
-            BV::Block(block) => {
-                for token in block.iter_values_warn() {
-                    data.verify_exists(Item::Dlc, token);
-                }
-            }
-        });
+        vd.field_item_or_list("dlc", Item::Dlc);
 
         vd.field_item("icon", Item::File);
         vd.field_bool("highlight");

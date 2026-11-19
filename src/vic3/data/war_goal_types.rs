@@ -41,6 +41,11 @@ impl DbKind for WarGoalType {
                 "colonization_rights",
                 "conquer_state",
                 "contain_threat",
+                "break_enforced_treaties",
+                "demand_strait_access",
+                "demand_toll_exemption",
+                "demand_no_tolls",
+                "demand_no_strait_closure",
                 "enforce_treaty_article",
                 "force_nationalization",
                 "foreign_investment_rights",
@@ -96,6 +101,7 @@ impl DbKind for WarGoalType {
             "targets_enemy_claims",
             "requires_interest",
             "debug",
+            "assent_required",
             "validate_subject_relation",
             "validate_formation_candidate_self",
             "validate_formation_candidate_target",
@@ -141,6 +147,7 @@ impl DbKind for WarGoalType {
                 "control_all_own_states",
                 "control_all_target_country_claims",
                 "control_any_releasable_state",
+                "control_half_target_country_states",
             ],
         );
 

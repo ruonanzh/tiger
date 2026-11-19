@@ -344,7 +344,7 @@ fn validate_strait_scores(_key: &Token, block: &Block, data: &Everything) {
     let mut vd = Validator::new(block, data);
     let sc_builder = |key: &Token| {
         let mut sc = ScopeContext::new(Scopes::Country, key);
-        sc.define_name("strait", Scopes::StraitType, key);
+        sc.define_name("strait", Scopes::Strait, key);
         sc.define_name("first_state", Scopes::State, key);
         sc.define_name("second_state", Scopes::State, key);
         sc.define_name("is_sole_controller", Scopes::Bool, key);

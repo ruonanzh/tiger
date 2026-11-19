@@ -6,7 +6,7 @@ pub const COMPANY_CATEGORIES: &[&str] = &[
     "capitalist_owned",
 ];
 
-// LAST UPDATED VIC3 VERSION 1.12.2
+// LAST UPDATED VIC3 VERSION 1.15.1
 pub const DLC_FEATURES_VIC3: &[&str] = &[
     "voice_of_the_people_content",
     "voice_of_the_people_preorder",
@@ -33,6 +33,9 @@ pub const DLC_FEATURES_VIC3: &[&str] = &[
     "ep2_content",
     "ep2_cosmetics",
     "ship_designer",
+    "ip5_content",
+    "ip5_cosmetics",
+    "regional_exile_pools",
 ];
 
 /// A list of music provided by DLCs, for people who don't have them
@@ -146,9 +149,18 @@ pub const TREATY_ARTICLE_CATEGORIES: &[&str] = &[
     "other",
 ];
 
-// LAST UPDATED VIC3 VERSION 1.13
-pub const CHARACTER_ARCHETYPES: &[&str] =
-    &["politician", "general", "admiral", "executive", "agitator", "ruler", "heir", "magnate"];
+// LAST UPDATED VIC3 VERSION 1.15.1
+pub const CHARACTER_ARCHETYPES: &[&str] = &[
+    "politician",
+    "general",
+    "admiral",
+    "executive",
+    "agitator",
+    "ruler",
+    "heir",
+    "magnate",
+    "favorite",
+];
 
 // LAST UPDATED VIC3 VERSION 1.7.1
 // Taken from common/labels/00_terrain_labels.txt and the unit_offense_ and unit_defense_ modifs.
@@ -167,6 +179,7 @@ pub const COMMON_DIRS: &[&str] = &[
     "common/acceptance_statuses",
     "common/achievements",
     "common/ai_regional_objectives",
+    "common/ai_ship_categories",
     "common/ai_strategic_region_stance_types",
     "common/ai_strategies",
     "common/alert_groups",
@@ -221,6 +234,7 @@ pub const COMMON_DIRS: &[&str] = &[
     "common/game_rules",
     "common/genes",
     "common/geographic_regions",
+    "common/glossary",
     "common/goods",
     "common/government_types",
     "common/harvest_condition_types",
@@ -238,6 +252,7 @@ pub const COMMON_DIRS: &[&str] = &[
     "common/legitimacy_levels",
     "common/liberty_desire_levels",
     "common/map_interaction_types",
+    "common/map_mode_defaults",
     "common/map_notification_types",
     "common/messages",
     "common/military_formation_flags",
@@ -270,6 +285,7 @@ pub const COMMON_DIRS: &[&str] = &[
     "common/production_method_groups",
     "common/production_methods",
     "common/proposal_types",
+    "common/regional_exile_pools",
     "common/religions",
     "common/script_values",
     "common/scripted_buttons",

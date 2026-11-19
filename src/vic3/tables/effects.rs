@@ -258,7 +258,7 @@ const SCOPE_EFFECT: &[(Scopes, &str, Effect)] = &[
     (Scopes::None, "error_log", UncheckedTodo),
     (Scopes::State, "establish_cossack_host", Yes),
     (Scopes::None, "execute_event_option", Vb(validate_execute_event_option)),
-    (Scopes::Character, "exile_character", Yes),
+    (Scopes::Character, "exile_character", Vbv(validate_exile_character)),
     (Scopes::StateRegion, "finish_harvest_condition", Item(Item::HarvestConditionType)),
     // docs say boolean
     (Scopes::InterestGroup, "finish_negotiation", Item(Item::Localization)),

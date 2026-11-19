@@ -911,6 +911,8 @@ const MODIF_TABLE: &[(&str, ModifKinds)] = &[
     ("country_disable_non_company_privatization_bool", ModifKinds::Country),
     ("country_disallow_aggressive_plays_bool", ModifKinds::Country),
     ("country_disallow_agitator_invites_bool", ModifKinds::Country),
+    ("country_disallow_army_creation_bool", ModifKinds::Country),
+    ("country_disallow_military_ship_construction_bool", ModifKinds::Country),
     ("country_disallow_trade_bool", ModifKinds::Country),
     ("country_disallow_trade_outside_canton_bool", ModifKinds::Country),
     ("country_disallow_trade_outside_kyushu_bool", ModifKinds::Country),
