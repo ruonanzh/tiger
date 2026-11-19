@@ -255,6 +255,7 @@ impl GuiCategories {
             WidgetProperty::modify_texture => GuiCategories::Unknown,
             WidgetProperty::movable => GuiCategories::Unknown,
             WidgetProperty::multiline => GuiCategories::Unknown,
+            WidgetProperty::multiplicative_zoom => GuiCategories::Unknown,
             WidgetProperty::name => GuiCategories::Widget,
             WidgetProperty::next => GuiCategories::Unknown,
             WidgetProperty::noprogresstexture => GuiCategories::Unknown,

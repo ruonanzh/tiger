@@ -58,6 +58,12 @@ impl DbKind for DiplomaticPlay {
         vd.field_trigger("selectable_in_lens", Tooltipped::No, &mut sc);
         vd.field_trigger("possible", Tooltipped::Yes, &mut sc);
         vd.field_trigger("additional_involvement_trigger", Tooltipped::No, &mut sc);
+        vd.field_trigger_builder("subject_join_initiator_trigger", Tooltipped::No, |key| {
+            let mut sc = ScopeContext::new(Scopes::Country, key);
+            sc.define_name("initiator", Scopes::Country, key);
+            sc.define_name("target_country", Scopes::Country, key);
+            sc
+        });
         vd.field_effect("on_weekly_pulse", Tooltipped::No, &mut diplo_sc);
         vd.field_effect("on_war_begins", Tooltipped::No, &mut diplo_sc);
         vd.field_effect("on_war_end", Tooltipped::No, &mut diplo_sc);

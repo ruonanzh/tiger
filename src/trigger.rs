@@ -353,6 +353,22 @@ pub fn validate_trigger_internal(
     side_effects
 }
 
+fn scope_trigger_in_context(
+    name: &Token,
+    data: &Everything,
+    _sc: &ScopeContext,
+) -> Option<(Scopes, Trigger)> {
+    #[cfg(feature = "vic3")]
+    if Game::is_vic3()
+        && name.lowercase_is("is_active")
+        && let Some(trigger) =
+            crate::vic3::tables::triggers::scope_trigger_in_context(name, _sc.scopes(data))
+    {
+        return Some(trigger);
+    }
+    scope_trigger(name, data)
+}
+
 /// Validate a trigger given its key and argument. It is like [`validate_trigger_internal`] except
 /// that all special cases are assumed to have been handled. This is the interface used for the
 /// `switch` effect, where the key and argument are not together in the script.
@@ -518,7 +534,7 @@ pub fn validate_trigger_key_bv(
                     }
                     validate_inscopes(part_flags, part, inscopes, sc, data);
                     sc.replace(outscope, part.clone());
-                } else if let Some((inscopes, trigger)) = scope_trigger(part, data) {
+                } else if let Some((inscopes, trigger)) = scope_trigger_in_context(part, data, sc) {
                     if !part_flags.contains(PartFlags::Last) {
                         let msg = format!("`{part}` should be the last part");
                         warn(ErrorKey::Validation).msg(msg).loc(part).push();

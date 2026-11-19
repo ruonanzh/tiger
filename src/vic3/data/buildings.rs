@@ -161,6 +161,7 @@ impl DbKind for BuildingType {
         vd.field_validated("required_construction", validate_non_dynamic_script_value);
 
         vd.field_item("owners", Item::PopType);
+        vd.field_list_items("valid_pop_culture_traits", Item::DiscriminationTrait);
         vd.field_numeric_range("economic_contribution", 0.0..=1.0);
         vd.field_numeric("min_raise_to_hire");
 
@@ -253,6 +254,7 @@ impl DbKind for BuildingGroup {
         vd.field_bool("is_subsistence");
         vd.field_bool("auto_place_buildings");
         vd.field_bool("capped_by_resources");
+        vd.field_bool("reserves_arable_land");
         vd.field_bool("discoverable_resource");
         vd.field_bool("depletable_resource");
         vd.field_bool("can_use_slaves");

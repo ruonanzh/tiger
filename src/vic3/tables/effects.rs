@@ -243,6 +243,7 @@ const SCOPE_EFFECT: &[(Scopes, &str, Effect)] = &[
     (Scopes::Country, "decrease_autonomy", Yes),
     (Scopes::Character, "demobilize", Removed("1.6", "")),
     (Scopes::MilitaryFormation, "deploy_to_front", Vbv(validate_teleport_to_front)),
+    (Scopes::PowerBloc, "destroy_power_bloc", Yes),
     (Scopes::Country, "disable_temporary_hostilities", Vb(validate_temporary_hostilities)),
     (Scopes::Party, "disband_party", Yes),
     (Scopes::PoliticalLobby, "disband_political_lobby", Yes),

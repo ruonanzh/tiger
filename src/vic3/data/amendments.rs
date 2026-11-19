@@ -70,6 +70,7 @@ impl DbKind for Amendment {
         vd.field_trigger_rooted("would_sponsor", Tooltipped::Yes, Scopes::InterestGroup);
 
         vd.field_trigger_rooted("ai_will_revoke", Tooltipped::Yes, Scopes::Country);
+        vd.field_script_value_no_breakdown_rooted("ai_revoke_weight_modifier", Scopes::Country);
 
         vd.field_numeric("amendment_activism_multiplier");
 

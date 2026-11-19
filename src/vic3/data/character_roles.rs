@@ -33,6 +33,8 @@ impl DbKind for CharacterRole {
         vd.field_choice("type", CHARACTER_ARCHETYPES);
         vd.field_numeric("priority");
         vd.field_bool("auto_assigned");
+        vd.field_bool("can_be_interest_group_leader");
+        vd.field_numeric("law_enactment_ideology_effect");
         vd.field_list_numeric_exactly("career_length", 2);
         vd.field_effect_rooted("on_career_end", Tooltipped::No, Scopes::Character);
         vd.field_bool("should_use_title_in_name");

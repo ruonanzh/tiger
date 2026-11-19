@@ -187,6 +187,7 @@ impl DbKind for TreatyArticle {
         }
 
         vd.field_trigger_rooted("visible", Tooltipped::No, Scopes::Country);
+        vd.field_trigger_rooted("show_in_lens", Tooltipped::No, Scopes::Country);
         vd.field_trigger_builder("possible", Tooltipped::Yes, |key| {
             let mut sc = ScopeContext::new(Scopes::Country, key);
             sc.define_name("other_country", Scopes::Country, key);
@@ -203,6 +204,11 @@ impl DbKind for TreatyArticle {
         });
         vd.field_trigger_builder("can_ratify", Tooltipped::Yes, |key| {
             build_article_treaty_sc(key, is_directed)
+        });
+        vd.field_trigger_builder("can_propose", Tooltipped::Yes, |key| {
+            let mut sc = build_article_sc_with_root(key, is_directed, Scopes::TreatyArticle);
+            sc.define_name("treaty", Scopes::Treaty, key);
+            sc
         });
 
         for active in &["on_entry_into_force", "on_enforced"] {
@@ -327,7 +333,11 @@ fn build_input_sc(key: &Token, input: &Token) -> ScopeContext {
 }
 
 fn build_article_sc(key: &Token, is_directed: bool) -> ScopeContext {
-    let mut sc = ScopeContext::new(Scopes::Country, key);
+    build_article_sc_with_root(key, is_directed, Scopes::Country)
+}
+
+fn build_article_sc_with_root(key: &Token, is_directed: bool, root: Scopes) -> ScopeContext {
+    let mut sc = ScopeContext::new(root, key);
     sc.define_name("article", Scopes::TreatyArticle, key);
 
     if is_directed {

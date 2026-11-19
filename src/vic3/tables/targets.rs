@@ -406,7 +406,8 @@ const SCOPE_TO_SCOPE: &[(Scopes, &str, Scopes)] = &[
             .union(Scopes::Ship)
             .union(Scopes::Strait)
             .union(Scopes::HarvestCondition)
-            .union(Scopes::Amendment),
+            .union(Scopes::Amendment)
+            .union(Scopes::AiRegionalObjective),
         "type",
         Scopes::BuildingType
             .union(Scopes::CompanyType)
@@ -420,7 +421,8 @@ const SCOPE_TO_SCOPE: &[(Scopes, &str, Scopes)] = &[
             .union(Scopes::ShipType)
             .union(Scopes::StraitType)
             .union(Scopes::HarvestConditionType)
-            .union(Scopes::AmendmentType),
+            .union(Scopes::AmendmentType)
+            .union(Scopes::AiRegionalObjectiveType),
     ),
     (Scopes::MilitaryFormation, "visibility", Scopes::Value),
     (Scopes::MilitaryFormation, "vulnerability", Scopes::Value),
@@ -428,6 +430,9 @@ const SCOPE_TO_SCOPE: &[(Scopes, &str, Scopes)] = &[
     (Scopes::Company, "weekly_prosperity_change", Scopes::Value),
     (Scopes::Pop, "workplace", Scopes::Building),
     (Scopes::State, "world_market_hub", Scopes::State),
+    (Scopes::Country, "worst_piracy_grievance", Scopes::Value),
+    (Scopes::Country, "worst_strait_access_grievance", Scopes::Value),
+    (Scopes::Country, "worst_strait_toll_grievance", Scopes::Value),
     (Scopes::None, "yes", Scopes::Bool),
     (Scopes::None, "YES", Scopes::Bool),
 ];

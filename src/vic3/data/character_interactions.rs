@@ -36,6 +36,7 @@ impl DbKind for CharacterInteraction {
 
         vd.field_trigger("potential", Tooltipped::No, &mut sc);
         vd.field_trigger("possible", Tooltipped::Yes, &mut sc);
+        vd.field_trigger_rooted("actor_capacity", Tooltipped::Yes, Scopes::Country);
         vd.field_effect("effect", Tooltipped::Yes, &mut sc);
         vd.field_validated_block_sc("cooldown", &mut sc, validate_duration);
 

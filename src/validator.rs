@@ -1321,19 +1321,8 @@ impl<'a> Validator<'a> {
     where
         F: FnMut(&BV, &Everything),
     {
-        let mut found = None;
-        for Field(key, cmp, bv) in self.block.iter_fields() {
-            if key.is(name) {
-                self.known_fields.push(key.as_str());
-                self.expect_eq_qeq(key, *cmp);
-                if let Some(other) = found {
-                    dup_assign_error(key, other, AllowInject::No);
-                }
-                f(bv, self.data);
-                found = Some(key);
-            }
-        }
-        found.is_some()
+        let data = self.data;
+        self.field_check(name, AllowInject::No, |_, bv| f(bv, data))
     }
 
     /// Just like [`Validator::field_validated`], but the closure is `f(key, bv, data)`.

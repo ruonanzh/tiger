@@ -201,6 +201,19 @@ impl Asset {
         vd.field_numeric("scale");
         vd.field_numeric("cull_distance");
 
+        if Game::is_vic3() {
+            vd.multi_field_validated_block("lod_distances", |block, data| {
+                let mut vd = Validator::new(block, data);
+                vd.multi_field_validated_block("lod", |block, data| {
+                    let mut vd = Validator::new(block, data);
+                    vd.req_field("index");
+                    vd.req_field("distance");
+                    vd.field_integer("index");
+                    vd.field_precise_numeric("distance");
+                });
+            });
+        }
+
         vd.multi_field_validated_block("lod_percentages", |block, data| {
             let mut vd = Validator::new(block, data);
             vd.multi_field_validated_block("lod", |block, data| {

@@ -38,6 +38,7 @@ impl DbKind for Message {
 
         vd.field_value("type"); // TODO: find out what is allowed here
         vd.field_item("group", Item::Localization);
+        vd.field_bool("feed_grouping");
         vd.field_item("texture", Item::File);
         vd.field_choice("notification_type", &["none", "feed", "toast", "popup"]);
 

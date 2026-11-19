@@ -94,6 +94,7 @@ impl DbKind for CountryType {
         vd.field_bool("uses_prestige");
         vd.field_bool("has_events");
         vd.field_bool("has_military");
+        vd.field_bool("ignores_military_qualifications");
         vd.field_bool("has_economy");
         vd.field_bool("has_politics");
         vd.field_bool("can_research");

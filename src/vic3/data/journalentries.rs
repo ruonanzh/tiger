@@ -75,6 +75,7 @@ impl DbKind for JournalEntry {
         });
 
         vd.field_item("icon", Item::File);
+        vd.field_bool("highlight");
 
         vd.field_trigger("is_shown_when_inactive", Tooltipped::No, &mut sc);
         vd.field_trigger("should_be_involved", Tooltipped::No, &mut country_sc);
@@ -83,6 +84,7 @@ impl DbKind for JournalEntry {
         vd.multi_field_item("scripted_button", Item::ScriptedButton);
 
         vd.field_trigger("activation_description", Tooltipped::Yes, &mut sc);
+        vd.field_validated_sc("reason", &mut sc, validate_desc);
         vd.field_trigger("possible", Tooltipped::Yes, &mut sc);
         vd.field_effect("immediate", Tooltipped::No, &mut sc);
         vd.field_effect("immediate_all_involved", Tooltipped::No, &mut country_sc);
@@ -233,6 +235,17 @@ impl DbKind for JournalEntry {
         vd.field_effect("on_timeout_all_involved", Tooltipped::No, &mut country_sc);
 
         vd.field_list_items("modifiers_while_active", Item::Modifier);
+        vd.multi_field_validated_block_sc(
+            "scaling_modifiers_while_active",
+            &mut sc,
+            |block, data, sc| {
+                let mut vd = Validator::new(block, data);
+                vd.req_field("modifier");
+                vd.req_field("value");
+                vd.field_item("modifier", Item::Modifier);
+                vd.field_script_value("value", sc);
+            },
+        );
 
         for field in &["on_weekly_pulse", "on_monthly_pulse", "on_yearly_pulse"] {
             vd.multi_field_validated_block_sc(field, &mut sc, validate_on_action);

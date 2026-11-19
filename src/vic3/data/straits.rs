@@ -26,6 +26,7 @@ impl DbKind for StraitDefinition {
         data.verify_exists(Item::Localization, key);
 
         vd.field_choice("type", &["natural", "artificial"]);
+        vd.field_numeric("grievance_mult");
         vd.field_bool("total_block_requires_full_control");
         vd.field_bool("military_block_requires_full_control");
         vd.field_bool("tolls_require_full_control");

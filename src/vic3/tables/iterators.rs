@@ -195,6 +195,11 @@ const ITERATOR: &[(Scopes, &str, Scopes)] = &[
         Scopes::Pop,
     ),
     (Scopes::Company, "scope_regional_hqs", Scopes::Building),
+    (
+        Scopes::Country.union(Scopes::StrategicRegion),
+        "scope_regional_objective",
+        Scopes::AiRegionalObjective,
+    ),
     (Scopes::Country.union(Scopes::MilitaryFormation), "scope_ship", Scopes::Ship),
     (
         Scopes::Country

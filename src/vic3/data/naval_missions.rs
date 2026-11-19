@@ -44,10 +44,12 @@ impl DbKind for NavalMissionType {
         vd.field_numeric("experience");
 
         vd.field_list_choice("intercept_targets", &["none", "hostile", "piracy", "all"]);
-        vd.field_list_choice(
-            "piracy_targets",
-            &["none", "hostile", "neutral", "allies", "non_allies", "all"],
-        );
+        for field in ["piracy_targets", "piracy_import_targets", "piracy_export_targets"] {
+            vd.field_list_choice(
+                field,
+                &["none", "hostile", "neutral", "allies", "non_allies", "all"],
+            );
+        }
 
         vd.field_validated_block("modifier", |block, data| {
             let vd = Validator::new(block, data);

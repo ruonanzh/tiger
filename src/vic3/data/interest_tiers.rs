@@ -58,6 +58,7 @@ impl DbKind for InterestTierType {
 
         vd.field_numeric("trade_advantage_exports");
         vd.field_numeric("trade_advantage_imports");
+        vd.field_numeric("leverage_generation_mult");
         vd.field_numeric("max_involvement");
     }
 }

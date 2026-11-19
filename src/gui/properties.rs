@@ -318,6 +318,7 @@ pub enum WidgetProperty {
     modify_texture,
     movable,
     multiline,
+    multiplicative_zoom,
     name,
     next,
     noprogresstexture,
@@ -764,6 +765,7 @@ impl GuiValidation {
             modify_texture => ComplexProperty,
             movable => Boolean,
             multiline => Boolean,
+            multiplicative_zoom => Boolean,
             name => UncheckedValue,
             next => UncheckedValue, // TODO: choices are states in the same widget
             noprogresstexture => Item(Item::File),
@@ -991,6 +993,8 @@ impl WidgetProperty {
             | index => GameFlags::Ck3 | GameFlags::Vic3 | GameFlags::Eu5,
 
             input_action => GameFlags::Vic3 | GameFlags::Eu5,
+
+            multiplicative_zoom => GameFlags::Vic3,
 
             invert_reticule_color | keyframe_editor_lane_container | Loop => {
                 GameFlags::Ck3 | GameFlags::Vic3 | GameFlags::Eu5

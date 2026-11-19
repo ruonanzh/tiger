@@ -62,6 +62,11 @@ impl DbKind for AiStrategy {
 
         // TODO verify scope type
         vd.field_trigger_rooted("will_form_power_bloc", Tooltipped::No, Scopes::Country);
+        vd.field_trigger_builder("will_incorporate_state", Tooltipped::No, |key| {
+            let mut sc = ScopeContext::new(Scopes::Country, key);
+            sc.define_name("target_state", Scopes::State, key);
+            sc
+        });
 
         vd.field_item("desired_tax_level", Item::Level);
         vd.field_item("max_tax_level", Item::Level);
@@ -174,6 +179,7 @@ impl DbKind for AiStrategy {
         vd.field_script_value_rooted("wanted_navy_size", Scopes::Country);
         vd.field_script_value_rooted("wanted_num_supply_ships", Scopes::Country);
         vd.field_script_value_rooted("ship_construction_output_multiplier", Scopes::Country);
+        vd.field_validated_block("ai_ship_category_weights", validate_ai_ship_category_weights);
 
         vd.field_validated_block("ship_group_weights", |block, data| {
             let mut vd = Validator::new(block, data);
@@ -217,6 +223,16 @@ impl DbKind for AiStrategy {
         vd.field_validated_key_block("wargoal_scores", validate_wargoal_scores);
         vd.field_validated_key_block("wargoal_weights", validate_wargoal_weights);
         vd.field_validated_key_block("strait_scores", validate_strait_scores);
+        vd.field_validated_block("cossack_host_scores", |block, data| {
+            let mut vd = Validator::new(block, data);
+            let sc_builder = |key: &Token| {
+                let mut sc = ScopeContext::new(Scopes::Country, key);
+                sc.define_name("target_state", Scopes::State, key);
+                sc
+            };
+            vd.field_script_value_no_breakdown_builder("establish_cossack_host", sc_builder);
+            vd.field_script_value_no_breakdown_builder("disband_cossack_host", sc_builder);
+        });
         vd.field_validated_key_block("fleet_compositions", validate_fleet_compositions);
 
         vd.field_trigger_rooted("possible", Tooltipped::No, Scopes::Country); // TODO scope type
@@ -356,36 +372,43 @@ fn validate_strait_scores(_key: &Token, block: &Block, data: &Everything) {
     });
 }
 
+fn validate_ai_ship_category_weights(block: &Block, data: &Everything) {
+    let mut vd = Validator::new(block, data);
+    vd.unknown_fields(|key, bv| {
+        data.verify_exists(Item::AiShipCategory, key);
+        validate_script_value(bv, data, &mut ScopeContext::new(Scopes::Country, key));
+    });
+}
+
 fn validate_fleet_compositions(_key: &Token, block: &Block, data: &Everything) {
     let mut vd = Validator::new(block, data);
-    for field in &["main_battle_fleet", "secondary_fleet", "raid_fleet"] {
-        vd.field_validated_block(field, |block, data| {
+    vd.unknown_block_fields(|_, block| {
+        let mut vd = Validator::new(block, data);
+        vd.field_validated_block("ai_ship_category_weights", validate_ai_ship_category_weights);
+        vd.field_validated_block("ship_group_weights", |block, data| {
             let mut vd = Validator::new(block, data);
-            vd.field_validated_block("ship_group_weights", |block, data| {
-                let mut vd = Validator::new(block, data);
-                vd.unknown_fields(|key, bv| {
-                    data.verify_exists(Item::ShipGroup, key);
-                    validate_script_value(bv, data, &mut ScopeContext::new(Scopes::Country, key));
-                });
+            vd.unknown_fields(|key, bv| {
+                data.verify_exists(Item::ShipGroup, key);
+                validate_script_value(bv, data, &mut ScopeContext::new(Scopes::Country, key));
             });
-            vd.field_validated_block("mission_type_weights", |block, data| {
-                let mut vd = Validator::new(block, data);
-                vd.field_script_value_no_breakdown_rooted("intercept", Scopes::Country);
-                vd.field_script_value_no_breakdown_rooted("project_power", Scopes::Country);
-                vd.field_script_value_no_breakdown_rooted("blockade", Scopes::Country);
-                vd.field_script_value_no_breakdown_rooted("raid_supply", Scopes::Country);
-                vd.field_script_value_no_breakdown_rooted("protect_supply", Scopes::Country);
-                vd.field_script_value_no_breakdown_rooted("port_bombardment", Scopes::Country);
-                vd.field_script_value_no_breakdown_rooted("piracy", Scopes::Country);
-                vd.field_script_value_no_breakdown_rooted("privateer", Scopes::Country);
-                vd.field_script_value_no_breakdown_rooted("hunt_pirates", Scopes::Country);
-            });
-            vd.field_script_value_no_breakdown_rooted("min_ships_wanted", Scopes::Country);
-            vd.field_script_value_no_breakdown_rooted("num_fleets_wanted", Scopes::Country);
-            vd.field_trigger_rooted("potential", Tooltipped::No, Scopes::Country);
-            vd.field_value("replace_key"); // TODO
         });
-    }
+        vd.field_validated_block("mission_type_weights", |block, data| {
+            let mut vd = Validator::new(block, data);
+            vd.field_script_value_no_breakdown_rooted("intercept", Scopes::Country);
+            vd.field_script_value_no_breakdown_rooted("project_power", Scopes::Country);
+            vd.field_script_value_no_breakdown_rooted("blockade", Scopes::Country);
+            vd.field_script_value_no_breakdown_rooted("raid_supply", Scopes::Country);
+            vd.field_script_value_no_breakdown_rooted("protect_supply", Scopes::Country);
+            vd.field_script_value_no_breakdown_rooted("port_bombardment", Scopes::Country);
+            vd.field_script_value_no_breakdown_rooted("piracy", Scopes::Country);
+            vd.field_script_value_no_breakdown_rooted("privateer", Scopes::Country);
+            vd.field_script_value_no_breakdown_rooted("hunt_pirates", Scopes::Country);
+        });
+        vd.field_script_value_no_breakdown_rooted("min_ships_wanted", Scopes::Country);
+        vd.field_script_value_no_breakdown_rooted("num_fleets_wanted", Scopes::Country);
+        vd.field_trigger_rooted("potential", Tooltipped::No, Scopes::Country);
+        vd.field_identifier("replace_key", "fleet composition key");
+    });
 }
 
 fn validate_liberate_country_scores(block: &Block, data: &Everything) {
