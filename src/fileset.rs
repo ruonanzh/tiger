@@ -758,20 +758,24 @@ impl Fileset {
             let msg = format!("file {file} does not exist");
             let candidates =
                 if Game::is_vic3() { self.missing_file_candidates(file) } else { Vec::new() };
-            let severity = if let [candidate] = candidates.as_slice()
-                && candidate.eq_ignore_ascii_case(file.trim_start_matches('/'))
-            {
-                Severity::Warning
-            } else if !candidates.is_empty() {
-                Severity::Tips
-            } else {
-                Item::File.severity()
-            };
-            let diagnostic = report(ErrorKey::MissingFile, severity.at_most(max_sev)).msg(msg);
-            let diagnostic = if candidates.is_empty() {
+            let case_matches: Vec<_> = candidates
+                .iter()
+                .filter(|candidate| candidate.eq_ignore_ascii_case(file.trim_start_matches('/')))
+                .collect();
+            let severity =
+                if candidates.is_empty() { Item::File.severity() } else { Severity::Tips };
+            let diagnostic = report(ErrorKey::MissingFile, severity.at_most(max_sev));
+            let diagnostic = if let [candidate] = case_matches.as_slice() {
                 diagnostic
+                    .weak()
+                    .msg(format!("file {file} differs from an existing path only in letter case"))
+                    .info(format!("Use {candidate} for portability to case-sensitive filesystems."))
+            } else if candidates.is_empty() {
+                diagnostic.msg(msg)
             } else {
-                diagnostic.info(format!("Existing path candidates: {}", candidates.join(", ")))
+                diagnostic
+                    .msg(msg)
+                    .info(format!("Existing path candidates: {}", candidates.join(", ")))
             };
             diagnostic.loc(t).push();
         }

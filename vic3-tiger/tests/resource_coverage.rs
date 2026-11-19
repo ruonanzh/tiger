@@ -142,7 +142,11 @@ fn reports_coverage_as_tips_and_retains_proven_format_diagnostics() {
     );
     let capped = find("missing-file", "gfx/ui/mixed.dds");
     assert_eq!(capped.len(), 1);
-    assert_eq!(capped[0].0.info.as_deref(), Some("Existing path candidates: gfx/ui/Mixed.dds"));
+    assert_eq!(capped[0].0.severity, Severity::Tips);
+    assert_eq!(
+        capped[0].0.info.as_deref(),
+        Some("Use gfx/ui/Mixed.dds for portability to case-sensitive filesystems.")
+    );
 
     let cross_file = find("duplicate-item", "localization key `across`");
     assert_eq!(cross_file.len(), 1);

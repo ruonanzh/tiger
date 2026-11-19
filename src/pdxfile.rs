@@ -32,6 +32,39 @@ pub enum PdxEncoding {
     Utf8NoBom,
 }
 
+// Match the script lexer's distinction between line comments and quoted strings.
+fn script_body_is_ascii(contents: &str) -> bool {
+    if contents.is_ascii() {
+        return true;
+    }
+    let mut quoted = false;
+    let mut escaped = false;
+    let mut comment = false;
+    for byte in contents.bytes() {
+        if comment {
+            comment = byte != b'\n';
+            continue;
+        }
+        if !byte.is_ascii() {
+            return false;
+        }
+        if quoted {
+            if escaped {
+                escaped = false;
+            } else if byte == b'\\' {
+                escaped = true;
+            } else if byte == b'"' {
+                quoted = false;
+            }
+        } else if byte == b'"' {
+            quoted = true;
+        } else if byte == b'#' {
+            comment = true;
+        }
+    }
+    true
+}
+
 pub struct PdxFile {}
 
 impl PdxFile {
@@ -55,7 +88,16 @@ impl PdxFile {
             Some(parse_pdx_file(entry, contents, BOM_UTF8_LEN, parser))
         } else {
             let msg = "Expected UTF-8 BOM encoding";
-            warn(ErrorKey::Encoding).msg(msg).abbreviated(entry).push();
+            if crate::game::Game::is_vic3() && script_body_is_ascii(&contents) {
+                crate::report::tips(ErrorKey::Encoding)
+                    .weak()
+                    .msg(msg)
+                    .info("Save with a UTF-8 BOM to preserve the expected encoding if non-ASCII text is added.")
+                    .abbreviated(entry)
+                    .push();
+            } else {
+                warn(ErrorKey::Encoding).msg(msg).abbreviated(entry).push();
+            }
             Some(parse_pdx_file(entry, contents, 0, parser))
         }
     }

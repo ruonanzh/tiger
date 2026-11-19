@@ -117,6 +117,22 @@ impl Events {
 
     pub fn check_scope(&self, token: &Token, sc: &mut ScopeContext, data: &Everything) {
         if let Some(event) = self.get_event(token.as_str()) {
+            #[cfg(feature = "vic3")]
+            if Game::is_vic3() && sc.effects_display_only() {
+                if !sc.scopes(data).intersects(event.expects_scope) {
+                    crate::report::tips(ErrorKey::Scopes)
+                        .weak()
+                        .msg(format!(
+                            "Event {token} declares {} scope in tooltip preview with {} scope",
+                            event.expects_scope,
+                            sc.scopes(data)
+                        ))
+                        .loc(token)
+                        .loc_msg(&event.expects_from_token, "event scope declared here")
+                        .push();
+                }
+                return;
+            }
             sc.expect(event.expects_scope, &Reason::Token(token.clone()), data);
         }
     }

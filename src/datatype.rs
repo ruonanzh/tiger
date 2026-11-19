@@ -71,6 +71,8 @@ pub enum CodeArg {
     /// datatype in front of it between parentheses, such as `'(int32)0'`. If it doesn't start
     /// with a datatype, the literal's type will be `CString`.
     Literal(Token),
+    /// A literal whose lexical recovery does not establish the actual runtime value.
+    UnreliableLiteral,
 }
 
 impl CodeChain {
@@ -153,6 +155,7 @@ fn validate_argument(
                 CodeArg::Chain(chain) => {
                     validate_datatypes(chain, data, sc, dc, expect_type, lang, format, false);
                 }
+                CodeArg::UnreliableLiteral => (),
                 CodeArg::Literal(token) => {
                     if token.as_str().starts_with('(') && token.as_str().contains(')') {
                         // These unwraps are safe because of the checks in the if condition
@@ -186,6 +189,7 @@ fn validate_argument(
             CodeArg::Literal(token) => {
                 data.verify_exists(itype, token);
             }
+            CodeArg::UnreliableLiteral => (),
         },
         Arg::Choice(choices) => match arg {
             CodeArg::Chain(chain) => {
@@ -197,6 +201,7 @@ fn validate_argument(
                     err(ErrorKey::Choice).weak().msg(msg).loc(token).push();
                 }
             }
+            CodeArg::UnreliableLiteral => (),
         },
     }
 }
@@ -689,12 +694,26 @@ pub fn validate_datatypes(
         }
 
         #[cfg(feature = "vic3")]
+        let mut unusable_custom_argument = false;
+        #[cfg(feature = "vic3")]
         if Game::is_vic3()
             && code.name.is("GetCustom")
             && code.arguments.len() == 1
             && let CodeArg::Literal(ref token) = code.arguments[0]
         {
-            if let Some(scopes) = scope_from_datatype(curtype) {
+            let key = token.as_str();
+            if key.trim() != key && data.item_exists(Item::CustomLocalization, key.trim()) {
+                unusable_custom_argument = true;
+                tips(ErrorKey::Datafunctions)
+                    .weak()
+                    .msg(format!(
+                        "GetCustom argument has whitespace around registered key `{}`",
+                        key.trim()
+                    ))
+                    .info("Use the registered key without surrounding whitespace.")
+                    .loc(token)
+                    .push();
+            } else if let Some(scopes) = scope_from_datatype(curtype) {
                 validate_custom(token, data, scopes, lang);
             } else if curtype == Datatype::Unknown
                 || curtype == Datatype::AnyScope
@@ -752,6 +771,10 @@ pub fn validate_datatypes(
         #[cfg(feature = "jomini")]
         if let Args::Args(a) = args {
             for (i, arg) in a.iter().enumerate() {
+                #[cfg(feature = "vic3")]
+                if unusable_custom_argument {
+                    continue;
+                }
                 // Handle |E that contain a SelectLocalization that chooses between two gameconcepts
                 if Game::is_jomini()
                     && code.name.is("SelectLocalization")
@@ -778,6 +801,43 @@ pub fn validate_datatypes(
                         .info("The exact string differs from the registered key. Verify whether the game trims it.")
                         .loc(token)
                         .push();
+                    continue;
+                }
+                #[cfg(feature = "vic3")]
+                if Game::is_vic3()
+                    && curtype == Datatype::Vic3(Vic3Datatype::HighlightManager)
+                    && code.name.is("HighlightBattle")
+                    && *arg == Arg::DType(Datatype::Vic3(Vic3Datatype::Battle))
+                    && let CodeArg::Chain(chain) = &code.arguments[i]
+                {
+                    let actual = validate_datatypes(
+                        chain,
+                        data,
+                        sc,
+                        dc,
+                        Datatype::Unknown,
+                        lang,
+                        format,
+                        false,
+                    );
+                    if actual == Datatype::Vic3(Vic3Datatype::NavalBattle) {
+                        tips(ErrorKey::Datafunctions)
+                            .weak()
+                            .msg("HighlightBattle receives NavalBattle where the export specifies Battle")
+                            .info("The shipped naval battle UI uses this combination. Verify support in game.")
+                            .loc(&code.name)
+                            .push();
+                    } else if actual != Datatype::Unknown
+                        && actual != Datatype::Vic3(Vic3Datatype::Battle)
+                    {
+                        let returned_by = chain.codes.last().map_or(&code.name, |code| &code.name);
+                        warn(ErrorKey::Datafunctions)
+                            .msg(format!(
+                                "{returned_by} returns {actual} but a Battle is needed here"
+                            ))
+                            .loc(returned_by)
+                            .push();
+                    }
                     continue;
                 }
                 validate_argument(&code.arguments[i], data, sc, dc, *arg, lang, format);

@@ -29,8 +29,10 @@ struct LocaParser {
     content: &'static str,
     chars: Peekable<Chars<'static>>,
     language: Language,
+    directory_language: Option<Language>,
     expecting_language: bool,
     language_confirmed: bool,
+    header_matches_directory: bool,
     loca_end: usize,
     value: Vec<LocaValue>,
     pending_line_ignores: Vec<IgnoreFilter>,
@@ -38,7 +40,12 @@ struct LocaParser {
 }
 
 impl LocaParser {
-    fn new(entry: &FileEntry, content: &'static str, lang: Language) -> Self {
+    fn new(
+        entry: &FileEntry,
+        content: &'static str,
+        lang: Language,
+        directory_language: Option<Language>,
+    ) -> Self {
         let mut chars = content.chars().peekable();
         let mut offset = 0;
 
@@ -84,8 +91,10 @@ impl LocaParser {
             content,
             chars,
             language: lang,
+            directory_language,
             expecting_language: true,
             language_confirmed: false,
+            header_matches_directory: false,
             value: Vec::new(),
             loca_end: 0,
             pending_line_ignores: Vec::new(),
@@ -383,10 +392,22 @@ impl LocaParser {
                 && body.trim().contains(' ')
                 && body.chars().all(|c| c.is_alphabetic() || c.is_whitespace() || c == '.')
         });
+        // The explicit |q flag identifies intended display text even when the body
+        // fails the key lexer. Keep it distinct from compact malformed substitutions.
+        let quoted_display_text = apparent_close.is_some_and(|(gap, after)| {
+            let body = &self.content[dollar + 1..self.offset + gap.len()];
+            before.ends_with('\'')
+                && after.starts_with('\'')
+                && body.strip_suffix("|q").is_some_and(|phrase| {
+                    phrase.trim().contains(' ')
+                        && phrase.chars().all(|c| c.is_alphabetic() || c.is_whitespace())
+                })
+        });
         let key_started = key.as_str().starts_with(|c: char| c.is_alphanumeric() || c == '_');
         let code_started = self.content[dollar + 1..self.loca_end].starts_with('[');
         let trailing_key = before.chars().rev().take_while(|c| is_key_char(*c)).any(|c| c == '_');
         let definite = !ambiguous_text
+            && !quoted_display_text
             && (key_started || code_started || trailing_key || apparent_close.is_some());
 
         let msg = "didn't recognize a key between $";
@@ -394,6 +415,13 @@ impl LocaParser {
             warn(ErrorKey::Localization)
                 .msg(msg)
                 .info("Use a single localization key enclosed in $ delimiters")
+                .loc(key)
+                .push();
+        } else if quoted_display_text {
+            tips(ErrorKey::Localization)
+                .weak()
+                .msg("Quoted substitution contains display text with spaces")
+                .info("Verify the intended format. Use a localization key with |q, or place literal display text directly in the argument.")
                 .loc(key)
                 .push();
         } else {
@@ -498,8 +526,21 @@ impl LocaParser {
             if self.expecting_language {
                 self.language_confirmed = key.is(&format!("l_{}", self.language));
                 if !self.language_confirmed {
-                    let msg = format!("wrong language header, should be `l_{}:`", self.language);
-                    warn(ErrorKey::Localization).msg(msg).loc(key).push();
+                    if Game::is_vic3()
+                        && let Some(language) = self.directory_language
+                        && key.is(&format!("l_{language}"))
+                    {
+                        self.header_matches_directory = true;
+                        warn(ErrorKey::Filename)
+                            .msg(format!("Localization filename suffix disagrees with the l_{language} header and directory"))
+                            .info(format!("Rename the file so it ends with _l_{language}.yml."))
+                            .loc(key)
+                            .push();
+                    } else {
+                        let msg =
+                            format!("wrong language header, should be `l_{}:`", self.language);
+                        warn(ErrorKey::Localization).msg(msg).loc(key).push();
+                    }
                 }
                 self.expecting_language = false;
                 self.skip_line();
@@ -718,6 +759,8 @@ impl<'a> ValueParser<'a> {
                 self.next_char();
                 let loc = self.loc;
                 let mut text = self.start_text();
+                let mut reported_expansion = None;
+                let mut unreliable_literal = false;
                 while let Some(c) = self.peek() {
                     if self.quoted_expansions.get(self.content_idx) == Some(&true) {
                         // A |q expansion contributes literal text to the enclosing argument.
@@ -726,8 +769,32 @@ impl<'a> ValueParser<'a> {
                         continue;
                     }
                     match c {
-                        '\'' => break,
+                        '\'' => {
+                            // A single quote in a macro's prose is not a delimiter authored
+                            // by the caller. Recover its text and point at the substitution.
+                            if Game::is_vic3()
+                                && let Some(link) = self.loc.link_idx
+                                && Some(link) != loc.link_idx
+                                && let Some(call) = crate::macros::MACRO_MAP.get_loc(link)
+                                && self.content[self.content_idx].as_str()[self.offset + 1..]
+                                    .starts_with(char::is_alphabetic)
+                            {
+                                if reported_expansion != Some(link) {
+                                    tips(ErrorKey::Datafunctions)
+                                        .weak()
+                                        .msg("Substitution introduces an apostrophe into a quoted argument")
+                                        .info("Use |q on the substitution to keep the apostrophe as literal text.")
+                                        .loc(call)
+                                        .loc_msg(self.loc, "apostrophe from localization value")
+                                        .push();
+                                    reported_expansion = Some(link);
+                                }
+                            } else {
+                                break;
+                            }
+                        }
                         ']' => {
+                            unreliable_literal = Game::is_vic3();
                             let msg = "possible unterminated argument string";
                             let info = "Using [ ] inside argument strings does not work";
                             warn(ErrorKey::Localization).msg(msg).info(info).loc(self.loc).push();
@@ -749,7 +816,11 @@ impl<'a> ValueParser<'a> {
                     self.value.push(LocaValue::Error);
                     return Vec::new();
                 }
-                v.push(CodeArg::Literal(text.take_to_token()));
+                v.push(if unreliable_literal || reported_expansion.is_some() {
+                    CodeArg::UnreliableLiteral
+                } else {
+                    CodeArg::Literal(text.take_to_token())
+                });
                 self.next_char();
             } else if self.peek() == Some(')') {
                 // Empty () means no arguments
@@ -856,6 +927,22 @@ impl<'a> ValueParser<'a> {
         if self.peek() == Some(']') {
             self.next_char();
             self.value.push(LocaValue::Code(chain, format));
+        } else if Game::is_vic3()
+            && self.peek() == Some('[')
+            && let Some(link) = self.loc.link_idx
+            && let Some(call) = crate::macros::MACRO_MAP.get_loc(link)
+            && let Some(last_code) = chain.codes.last()
+            && last_code.name.loc.link_idx != Some(link)
+        {
+            warn(ErrorKey::Datafunctions)
+                .msg("Localization substitution starts another data function before the current chain closes")
+                .info("Close the current chain before the substitution or repair the data function around it.")
+                .loc(call)
+                .loc_msg(&last_code.name, "unclosed data function chain")
+                .loc_msg(self.loc, "expanded data function starts here")
+                .push();
+            self.value.push(LocaValue::Code(chain, format));
+            // Leave the next chain available for independent validation.
         } else {
             self.unexpected_char("expected `]`", ErrorKey::Datafunctions);
             self.value.push(LocaValue::Error);
@@ -1226,6 +1313,10 @@ impl LocaReader {
     pub(crate) fn language_confirmed(&self) -> bool {
         self.parser.language_confirmed
     }
+
+    pub(crate) fn header_matches_directory(&self) -> bool {
+        self.parser.header_matches_directory
+    }
 }
 
 impl Iterator for LocaReader {
@@ -1236,8 +1327,13 @@ impl Iterator for LocaReader {
     }
 }
 
-pub fn parse_loca(entry: &FileEntry, content: String, lang: Language) -> LocaReader {
+pub fn parse_loca(
+    entry: &FileEntry,
+    content: String,
+    lang: Language,
+    directory_language: Option<Language>,
+) -> LocaReader {
     let content = content.leak();
-    let parser = LocaParser::new(entry, content, lang);
+    let parser = LocaParser::new(entry, content, lang, directory_language);
     LocaReader { parser }
 }

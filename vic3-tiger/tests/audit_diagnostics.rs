@@ -158,8 +158,12 @@ fn reports_diagnostic_evidence_without_changing_affected_rules() {
     );
     let wrong_case = find(ALIASES, "missing-file", "gfx/existing.bk2");
     assert_eq!(wrong_case.len(), 1);
-    assert_eq!(wrong_case[0].0.severity, Severity::Warning);
-    assert_eq!(wrong_case[0].0.info.as_deref(), Some("Existing path candidates: gfx/Existing.BK2"));
+    assert_eq!(wrong_case[0].0.severity, Severity::Tips);
+    assert_eq!(wrong_case[0].0.confidence, Confidence::Weak);
+    assert_eq!(
+        wrong_case[0].0.info.as_deref(),
+        Some("Use gfx/Existing.BK2 for portability to case-sensitive filesystems.")
+    );
     for (line, path) in [(5, "gfx/absent.bk2"), (6, "gfx/cycle.bk2")] {
         let missing = find(ALIASES, "missing-file", path);
         assert_eq!(missing.len(), 1);

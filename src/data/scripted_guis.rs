@@ -151,7 +151,9 @@ impl ScriptedGui {
                     };
                     match &code.arguments[0] {
                         CodeArg::Literal(name) => sc.define_name(name.as_str(), scope, name),
-                        CodeArg::Chain(_) => sc.set_strict_scopes(false),
+                        CodeArg::Chain(_) | CodeArg::UnreliableLiteral => {
+                            sc.set_strict_scopes(false)
+                        }
                     }
                 } else if !code.name.is("End") {
                     warn(ErrorKey::Gui).msg("expected AddScope or End").loc(&code.name).push();

@@ -122,6 +122,7 @@ impl DataBinding {
         }
         match self.replace_chain(self.body.as_ref()?, call)? {
             CodeArg::Chain(chain) => Some(chain),
+            CodeArg::UnreliableLiteral => None,
             CodeArg::Literal(token) => {
                 let msg = "cannot substitute a literal here";
                 err(ErrorKey::Datafunctions).msg(msg).loc(token).push();
@@ -149,6 +150,7 @@ impl DataBinding {
                             }
                             return Some(call.arguments[idx].clone());
                         }
+                        CodeArg::UnreliableLiteral => return None,
                         CodeArg::Chain(caller_chain) => {
                             result.extend_from_slice(&caller_chain.codes);
                         }
@@ -174,7 +176,7 @@ impl DataBinding {
     fn replace_arg(&self, body_arg: &CodeArg, call: &Code) -> Option<CodeArg> {
         match body_arg {
             CodeArg::Chain(body_chain) => self.replace_chain(body_chain, call),
-            CodeArg::Literal(_) => Some(body_arg.clone()),
+            CodeArg::Literal(_) | CodeArg::UnreliableLiteral => Some(body_arg.clone()),
         }
     }
 

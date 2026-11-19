@@ -62,6 +62,7 @@ closure.2 = {
     context = country
     immediate = {
         show_as_tooltip = { trigger_event = closure.1 }
+        trigger_event = closure.1
     }
 }
 "#;
@@ -196,13 +197,12 @@ closure.2 = {
         assert!(!at(INTERACTION, 2, "is_heir_of_own_country", warning));
         assert!(!at(PRINCIPLE, 4, "current_cohesion_number", warning));
         assert_eq!(
-            at(LOCALIZATION, 3, "argument string", warning)
-                || at(LOCALIZATION, 3, "expected", warning)
-                || at(LOCALIZATION, 2, "argument string", warning)
-                || at(LOCALIZATION, 2, "expected", warning),
+            at(LOCALIZATION, 3, "Substitution introduces an apostrophe", Severity::Tips),
             broken,
             "{reports:#?}",
         );
+        assert!(!at(LOCALIZATION, 2, "expected `)`", warning));
+        assert!(!at(LOCALIZATION, 2, "expected `]`", warning));
         assert_eq!(at(LOCALIZATION, 4, "unknown datafunction GetNmae", warning), broken);
         assert_eq!(at(LOCALIZATION, 5, "didn't recognize a key", warning), broken);
         assert_eq!(at(LOCALIZATION, 6, "expected `]`", warning), broken);
@@ -227,7 +227,17 @@ closure.2 = {
             broken
         );
         assert_eq!(
-            at(JOURNAL, 4, "`closure.1` is for country but scope seems to be none", warning),
+            at(
+                JOURNAL,
+                4,
+                "Event closure.1 declares country scope in tooltip preview",
+                Severity::Tips
+            ),
+            broken
+        );
+        assert!(!at(JOURNAL, 4, "scope seems to be none", warning));
+        assert_eq!(
+            at(JOURNAL, 5, "`closure.1` is for country but scope seems to be none", warning),
             broken
         );
         assert!(!at(EVENTS, 16, "scope seems to be none", warning));

@@ -281,6 +281,7 @@ const TRIGGER: &[(Scopes, &str, Trigger)] = &[
         "country_average_religious_acceptance",
         Block(&[("target", Scope(Scopes::Religion)), ("value", CompareValue)]),
     ),
+    (Scopes::Country, "can_have_mass_migration_to", Scope(Scopes::Country)), // unconfirmed alias; see trigger validation
     (Scopes::Country, "country_can_have_mass_migration_to", Scope(Scopes::Country)), // undocumented
     (Scopes::CountryDefinition, "country_definition_has_culture", Scope(Scopes::Culture)),
     (Scopes::Country, "country_fervor_primary_culture", CompareValue),

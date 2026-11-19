@@ -837,9 +837,31 @@ fn match_trigger_bv(
     #[cfg(not(any(feature = "ck3", feature = "vic3", feature = "hoi4", feature = "eu5")))]
     let warn_if_eq = false;
 
+    #[cfg(feature = "vic3")]
+    if Game::is_vic3() && name.lowercase_is("can_have_mass_migration_to") {
+        tips(ErrorKey::Validation)
+            .weak()
+            .msg("Availability of the trigger can_have_mass_migration_to is unconfirmed")
+            .info("The indexed trigger name is country_can_have_mass_migration_to.")
+            .loc(name)
+            .push();
+    }
+
     match trigger {
         Trigger::Boolean => {
             if let Some(token) = bv.expect_value() {
+                #[cfg(feature = "vic3")]
+                if Game::is_vic3() && name.lowercase_is("debug_log_details") && token.is("true") {
+                    tips(ErrorKey::Validation)
+                        .weak()
+                        .msg("The debug_log_details value true is unconfirmed")
+                        .info("Use the script boolean yes for a checked spelling.")
+                        .loc(token)
+                        .push();
+                } else {
+                    validate_target(token, data, sc, Scopes::Bool);
+                }
+                #[cfg(not(feature = "vic3"))]
                 validate_target(token, data, sc, Scopes::Bool);
             }
         }
@@ -956,6 +978,22 @@ fn match_trigger_bv(
         }
         Trigger::ScopeOrItem(s, i) => {
             if let Some(token) = bv.expect_value() {
+                #[cfg(feature = "vic3")]
+                if Game::is_vic3()
+                    && name.lowercase_is("has_potential_resource")
+                    && !data.item_exists(Item::BuildingType, token.as_str())
+                    && data.item_exists(Item::BuildingGroup, token.as_str())
+                {
+                    tips(ErrorKey::Validation)
+                        .weak()
+                        .msg(format!("has_potential_resource uses building group {token}"))
+                        .info("Verify whether this trigger accepts a building group at runtime.")
+                        .loc(token)
+                        .push();
+                } else {
+                    validate_item_or_target(token, data, sc, *i, *s, max_sev);
+                }
+                #[cfg(not(feature = "vic3"))]
                 validate_item_or_target(token, data, sc, *i, *s, max_sev);
             }
         }

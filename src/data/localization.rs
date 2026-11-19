@@ -860,20 +860,17 @@ impl FileHandler<(Language, bool, Vec<LocaEntry>)> for Localization {
             if !self.check_langs[filelang.to_idx()] {
                 return None;
             }
-            // Localization files don't have to be in a subdirectory corresponding to their language.
-            // However, if there's one in a subdirectory for a *different* language than the one in its name,
-            // then something is probably wrong.
-            if let Ok(lang) = Language::try_from(lang_str.as_ref())
-                && filelang != lang
-            {
-                let msg = "localization file with wrong name or in wrong directory";
-                let info = "A localization file should be in a subdirectory corresponding to its language.";
-                warn(ErrorKey::Filename).msg(msg).info(info).loc(entry).push();
-            }
+            let directory_language =
+                Language::try_from(lang_str.as_ref()).ok().filter(|lang| *lang != filelang);
             match read_to_string(entry.fullpath()) {
                 Ok(content) => {
-                    let mut reader = parse_loca(entry, content, filelang);
+                    let mut reader = parse_loca(entry, content, filelang, directory_language);
                     let entries = reader.by_ref().collect();
+                    if directory_language.is_some() && !reader.header_matches_directory() {
+                        let msg = "localization file with wrong name or in wrong directory";
+                        let info = "A localization file should be in a subdirectory corresponding to its language.";
+                        warn(ErrorKey::Filename).msg(msg).info(info).loc(entry).push();
+                    }
                     return Some((filelang, reader.language_confirmed(), entries));
                 }
                 Err(e) => {
