@@ -655,6 +655,14 @@ const TRIGGER: &[(Scopes, &str, Trigger)] = &[
         "has_modifier",
         Item(Item::Modifier),
     ),
+    (
+        Scopes::MilitaryFormation,
+        "has_naval_mission_in_region",
+        Block(&[
+            ("type", Item(Item::NavalMissionType)),
+            ("region", Scope(Scopes::StrategicRegion)),
+        ]),
+    ),
     (Scopes::MilitaryFormation, "has_naval_mission_with_invalid_area", Boolean),
     (Scopes::InterestGroup, "has_negotiated", Boolean),
     (
@@ -694,6 +702,7 @@ const TRIGGER: &[(Scopes, &str, Trigger)] = &[
     (Scopes::PowerBloc, "has_principle", Scope(Scopes::PowerBlocPrinciple)),
     (Scopes::PowerBloc, "has_principle_group", Scope(Scopes::PowerBlocPrincipleGroup)),
     (Scopes::None, "has_reached_end_date", Boolean),
+    (Scopes::State, "has_recently_removed_cossack_host", Boolean),
     (
         Scopes::Country,
         "has_region_stance",
@@ -702,6 +711,7 @@ const TRIGGER: &[(Scopes, &str, Trigger)] = &[
             ("stance", Item(Item::AiStrategicRegionStanceType)),
         ]),
     ),
+    (Scopes::Country, "has_regional_exile_pool_access", Item(Item::RegionalExilePool)),
     (Scopes::Character, "has_religion", ScopeOrItem(Scopes::Religion, Item::Religion)),
     (Scopes::Religion, "has_religious_taboo", Item(Item::Goods)),
     (Scopes::Country, "has_researchable_technology", Boolean),
