@@ -40,5 +40,12 @@ impl DbKind for AirGraphics {
         vd.field_numeric("speed");
         vd.field_integer("max_count");
         vd.field_numeric("height");
+
+        vd.field_list_precise_numeric_exactly("breeding_latitude", 2);
+        vd.field_list_precise_numeric_exactly("wintering_latitude", 2);
+        vd.field_list_items("breeding_regions", Item::StrategicRegion);
+        vd.field_list_items("wintering_regions", Item::StrategicRegion);
+        vd.field_list("depart_in");
+        vd.field_list("return_in");
     }
 }

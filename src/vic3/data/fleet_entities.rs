@@ -38,10 +38,12 @@ impl DbKind for FleetEntity {
 
         vd.field_choice("hull_type", &["wood", "steel"]);
         vd.field_numeric("motion_intensity");
+        vd.field_precise_numeric("max_wind_lean");
 
         vd.field_numeric("length");
 
         vd.field_item("entity", Item::Entity);
+        vd.field_item("flagship_signalflags_entity", Item::Entity);
 
         validate_locators(&mut vd);
 

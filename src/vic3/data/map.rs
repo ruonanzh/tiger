@@ -153,6 +153,7 @@ impl DbKind for MapMode {
         vd.field_bool("has_fog_of_war");
         vd.field_bool("show_occupation");
         vd.field_bool("show_formation_movement_arrows");
+        vd.field_bool("show_supply_route_arrows");
         vd.field_bool("is_visible");
         vd.field_bool("is_visible_to_countryless_observer");
         vd.field_item("gradient_border_settings", Item::GradientBorderSettings);
