@@ -100,27 +100,24 @@ impl ScriptedGui {
                 && chain.codes[0].name.is("GreatHolyWarWindow")
                 && chain.codes[1].name.is("GetScope");
 
-            if !ghw {
-                if !chain.codes[0].name.is("GuiScope") {
-                    warn(ErrorKey::Gui).msg("expected GuiScope").loc(&chain.codes[0].name).push();
-                    return;
-                }
-                if !chain.codes[1].name.is("SetRoot") {
-                    warn(ErrorKey::Gui).msg("expected SetRoot").loc(&chain.codes[1].name).push();
-                    return;
-                }
-                if chain.codes[1].arguments.len() != 1 {
-                    // The caller already warns about this
-                    return;
-                }
+            if !ghw && !chain.codes[0].name.is("GuiScope") {
+                warn(ErrorKey::Gui).msg("expected GuiScope").loc(&chain.codes[0].name).push();
+                return;
             }
-            // Get the root scope
-            let scope = if ghw {
-                Scopes::Character
-            } else if let CodeArg::Chain(chain) = &chain.codes[1].arguments[0] {
-                deduce_scope(chain, data, context_sc, dc)
+
+            let root = &chain.codes[1];
+            let (scope, scope_args_start) = if ghw {
+                (Scopes::Character, 2)
+            } else if root.name.is("SetRoot") {
+                let [CodeArg::Chain(chain)] = root.arguments.as_slice() else {
+                    // The caller checks the argument.
+                    return;
+                };
+                (deduce_scope(chain, data, context_sc, dc), 2)
+            } else if Game::is_vic3() && block.field_value_is("scope", "none") {
+                (Scopes::None, 1)
             } else {
-                // TODO: caller will warn about this once argument type is filled in
+                warn(ErrorKey::Gui).msg("expected SetRoot").loc(&root.name).push();
                 return;
             };
             // Compare it to the declared root scope of the scripted gui
@@ -141,7 +138,7 @@ impl ScriptedGui {
             }
 
             // Get the additional scopes
-            for code in chain.codes.iter().skip(2) {
+            for code in chain.codes.iter().skip(scope_args_start) {
                 if code.name.is("AddScope") {
                     if code.arguments.len() != 2 {
                         // The caller already warns about this
@@ -161,6 +158,21 @@ impl ScriptedGui {
                     return;
                 }
             }
+            if scope_args_start == 1
+                && sc.is_strict()
+                && let Some(saved_scopes) = block.get_field_list("saved_scopes")
+            {
+                for saved_scope in saved_scopes {
+                    if sc.is_name_defined(saved_scope.as_str(), data).is_none() {
+                        warn(ErrorKey::Gui)
+                            .msg(format!("missing AddScope for scripted gui scope `{saved_scope}`"))
+                            .loc(&code.name)
+                            .loc_msg(&saved_scope, "saved scope declared here")
+                            .push();
+                    }
+                }
+            }
+
             match code.name.as_str() {
                 "BuildTooltip" => {
                     if let Some(block) = block.get_field_block("is_valid") {

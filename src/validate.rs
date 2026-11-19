@@ -21,14 +21,14 @@ use crate::lowercase::Lowercase;
 #[cfg(feature = "jomini")]
 use crate::report::fatal;
 use crate::report::{Confidence, ErrorKey, Severity, err, report, warn};
-#[cfg(any(feature = "ck3", feature = "hoi4"))]
+#[cfg(any(feature = "ck3", feature = "hoi4", feature = "vic3"))]
 use crate::scopes::Scopes;
 use crate::scopes::{scope_prefix, scope_to_scope};
 #[cfg(feature = "jomini")]
 use crate::script_value::{validate_non_dynamic_script_value, validate_script_value};
 use crate::token::Token;
 use crate::tooltipped::Tooltipped;
-#[cfg(any(feature = "ck3", feature = "hoi4"))]
+#[cfg(any(feature = "ck3", feature = "hoi4", feature = "vic3"))]
 use crate::trigger::validate_target_ok_this;
 #[cfg(feature = "jomini")]
 use crate::trigger::validate_trigger;
@@ -272,7 +272,7 @@ pub fn validate_possibly_named_color(bv: &BV, data: &Everything) {
 }
 
 /// Check some iterator fields *before* the list scope has opened.
-#[allow(unused_variables)] // `name` is only used for ck3
+#[allow(unused_variables)]
 pub fn precheck_iterator_fields(
     ltype: ListType,
     name: &str,
@@ -340,6 +340,13 @@ pub fn precheck_iterator_fields(
         }
         if let Some(value) = block.get_field("value") {
             validate_script_value(value, data, sc);
+        }
+    }
+
+    #[cfg(feature = "vic3")]
+    if Game::is_vic3() && name == "container" {
+        for parent in block.get_field_values("parent") {
+            validate_target_ok_this(parent, data, sc, Scopes::non_primitive());
         }
     }
 
@@ -478,6 +485,16 @@ pub fn validate_inside_iterator(
             let severity = Severity::Warning.at_most(vd.max_severity());
             report(ErrorKey::Validation, severity).msg(msg).loc(show).push();
         }
+    }
+
+    #[cfg(feature = "vic3")]
+    if Game::is_vic3() && name == "container" {
+        vd.field_identifier("tag", "container tag");
+        let severity = Severity::Error.at_most(vd.max_severity());
+        vd.field_validated_list("tags", |tag, _| {
+            validate_identifier(tag, "container tag", severity);
+        });
+        vd.field_value("parent"); // checked in the outer scope
     }
 
     // Docs say that all three can take either list or variable, but global and local lists must be variable lists.

@@ -1,3 +1,5 @@
+use std::sync::LazyLock;
+
 use crate::block::Block;
 use crate::db::{Db, DbKind};
 use crate::everything::Everything;
@@ -53,10 +55,11 @@ inventory::submit! {
     ItemLoader::Normal(GameFlags::Vic3, Item::MapMode, MapMode::add)
 }
 
-// LAST UPDATED VIC3 VERSION 1.8.1
+// LAST UPDATED VIC3 VERSION 1.15.1
 // Taken from gfx/map/map_modes/map_modes.txt
 const MAP_PAINTING_MODES: &[&str] = &[
     "clout_nationally",
+    "cold_effect",
     "colonizable_provinces",
     "countries",
     "country_attitude",
@@ -74,6 +77,7 @@ const MAP_PAINTING_MODES: &[&str] = &[
     "goods_production",
     "harvest_conditions",
     "ig_strength",
+    "journal_entry_map_data",
     "literacy",
     "loyalists",
     "market_access",
@@ -81,6 +85,8 @@ const MAP_PAINTING_MODES: &[&str] = &[
     "mass_migration_pull",
     "migration",
     "migration_pull",
+    "min_cold_effect",
+    "max_cold_effect",
     "none",
     "obstinance",
     "player_alliances",
@@ -100,7 +106,9 @@ const MAP_PAINTING_MODES: &[&str] = &[
     "religion_population",
     "standard_of_living",
     "state_gradient",
+    "state_infamy",
     "state_mass_migration_pull",
+    "state_value",
     "states",
     "strategic_regions",
     "technology_progress",
@@ -108,13 +116,17 @@ const MAP_PAINTING_MODES: &[&str] = &[
     "interests",
 ];
 
-// LAST UPDATED VIC3 VERSION 1.7.1
+static MAP_PAINTING_MODES_SECONDARY: LazyLock<Vec<&str>> =
+    LazyLock::new(|| [MAP_PAINTING_MODES, &["journal_entry_map_data_second"]].concat());
+
+// LAST UPDATED VIC3 VERSION 1.15.1
 // Taken from gfx/map/map_modes/map_modes.txt
 const MAP_NAMES: &[&str] = &[
     "countries",
     "cultures",
     "market_areas",
     "markets",
+    "none",
     "power_blocs",
     "religions",
     "states",
@@ -139,7 +151,7 @@ impl DbKind for MapMode {
         vd.field_item("icon", Item::File);
 
         vd.field_choice("map_painting_mode", MAP_PAINTING_MODES);
-        vd.field_choice("map_painting_mode_secondary", MAP_PAINTING_MODES);
+        vd.field_choice("map_painting_mode_secondary", &MAP_PAINTING_MODES_SECONDARY);
         vd.field_choice("map_painting_mode_alternate", MAP_PAINTING_MODES);
         vd.field_choice("map_names", MAP_NAMES);
         vd.field_list("map_markers"); // TODO widget names from gui/map_markers.gui

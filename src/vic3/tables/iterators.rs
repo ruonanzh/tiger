@@ -64,6 +64,7 @@ const ITERATOR: &[(Scopes, &str, Scopes)] = &[
         Scopes::NewCombatUnit,
     ),
     (Scopes::Country, "company", Scopes::Company),
+    (Scopes::None, "container", Scopes::Container),
     (Scopes::None, "country", Scopes::Country),
     (Scopes::Country, "country_strategic_region", Scopes::StrategicRegion),
     (Scopes::None, "decentralized_country", Scopes::Country),

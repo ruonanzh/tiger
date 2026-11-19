@@ -769,6 +769,7 @@ const TRIGGER: &[(Scopes, &str, Trigger)] = &[
     (Scopes::Country, "has_sufficient_construction_capacity_for_investment", Boolean),
     // no examples in vanilla
     (Scopes::Country, "has_sufficient_sailors", Boolean),
+    (Scopes::Container, "has_tag", Identifier("container tag")),
     (
         Scopes::Country,
         "has_technology_progress",

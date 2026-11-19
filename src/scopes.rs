@@ -234,6 +234,7 @@ bitflags! {
         #[cfg(feature = "vic3")] const StraitType = 1<<103;
         #[cfg(feature = "vic3")] const AiRegionalObjectiveType = 1<<104;
         #[cfg(feature = "vic3")] const AiRegionalObjective = 1<<105;
+        #[cfg(feature = "vic3")] const Container = 1<<106;
 
         #[cfg(feature = "imperator")] const Area = 1<<16;
         #[cfg(feature = "imperator")] const CountryCulture = 1<<17;

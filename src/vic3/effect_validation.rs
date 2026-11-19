@@ -4,13 +4,15 @@ use crate::desc::validate_desc;
 use crate::everything::Everything;
 use crate::helpers::TigerHashSet;
 use crate::item::Item;
-use crate::report::{ErrorKey, ErrorLoc, err, warn};
+use crate::report::{ErrorKey, ErrorLoc, Severity, err, warn};
 use crate::scopes::Scopes;
 use crate::script_value::validate_script_value;
 use crate::token::Token;
 use crate::tooltipped::Tooltipped;
 use crate::trigger::validate_target;
-use crate::validate::{validate_color, validate_optional_duration, validate_possibly_named_color};
+use crate::validate::{
+    validate_color, validate_identifier, validate_optional_duration, validate_possibly_named_color,
+};
 use crate::validator::{Validator, ValueValidator};
 use crate::vic3::data::buildings::BuildingType;
 use crate::vic3::tables::misc::{LOBBY_FORMATION_REASON, STATE_TYPES, STRATA, TARIFF_LEVELS};
@@ -472,6 +474,26 @@ pub fn validate_create_character(
     vd.field_bool("is_agitator");
     vd.field_bool("ig_leader");
     vd.field_item("commander_rank", Item::CommanderRank);
+}
+
+pub fn validate_create_container(
+    _key: &Token,
+    _block: &Block,
+    _data: &Everything,
+    sc: &mut ScopeContext,
+    mut vd: Validator,
+    _tooltipped: Tooltipped,
+) {
+    vd.field_identifier_or_flag("name", sc);
+    let severity = Severity::Error.at_most(vd.max_severity());
+    vd.field_validated_list("tags", |tag, _| {
+        validate_identifier(tag, "container tag", severity);
+    });
+    vd.field_target_ok_this("parent", sc, Scopes::non_primitive());
+    if let Some(name) = vd.field_identifier("save_scope_as", "scope name") {
+        sc.define_name_token(name.as_str(), Scopes::Container, name, Temporary::No);
+    }
+    vd.field_effect_rooted("on_created", Tooltipped::No, Scopes::Container);
 }
 
 pub fn validate_create_country(

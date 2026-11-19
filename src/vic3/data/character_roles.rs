@@ -1,3 +1,5 @@
+use std::sync::LazyLock;
+
 use crate::block::Block;
 use crate::context::ScopeContext;
 use crate::db::{Db, DbKind};
@@ -11,6 +13,9 @@ use crate::tooltipped::Tooltipped;
 use crate::validator::Validator;
 use crate::vic3::modif::ModifKinds;
 use crate::vic3::tables::misc::CHARACTER_ARCHETYPES;
+
+static CHARACTER_ROLE_TYPES: LazyLock<Vec<&str>> =
+    LazyLock::new(|| [CHARACTER_ARCHETYPES, &["other"]].concat());
 
 #[derive(Clone, Debug)]
 pub struct CharacterRole {}
@@ -30,7 +35,7 @@ impl DbKind for CharacterRole {
         let mut vd = Validator::new(block, data);
 
         vd.field_item("texture", Item::File);
-        vd.field_choice("type", CHARACTER_ARCHETYPES);
+        vd.field_choice("type", &CHARACTER_ROLE_TYPES);
         vd.field_numeric("priority");
         vd.field_bool("auto_assigned");
         vd.field_bool("can_be_interest_group_leader");
@@ -38,7 +43,7 @@ impl DbKind for CharacterRole {
         vd.field_list_numeric_exactly("career_length", 2);
         vd.field_effect_rooted("on_career_end", Tooltipped::No, Scopes::Character);
         vd.field_bool("should_use_title_in_name");
-        vd.field_choice("title_format", &["from_name", "ruler", "heir", "custom"]);
+        vd.field_choice("title_format", &["from_name", "from_rank", "ruler", "heir", "custom"]);
         if block.field_value_is("title_format", "custom") {
             let loca = format!("{key}_custom_loc");
             data.verify_exists_implied(Item::Localization, &loca, key);
