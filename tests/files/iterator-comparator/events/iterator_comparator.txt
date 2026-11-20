@@ -1,0 +1,38 @@
+namespace = iterator_comparator
+
+iterator_comparator.1 = {
+    type = country_event
+    immediate = {
+        random_interest_group = { save_scope_as = baseline }
+        random_interest_group ?= { save_scope_as = baseline_qeq }
+        random_interest_group <= {
+            save_scope_as = tolerated
+            set_variable = {}
+        }
+        random_interest_group >= {}
+        random_interest_group < {}
+        random_interest_group > {}
+        random_interest_group == {}
+        random_interest_group != {}
+        random_interest_group <= yes
+        every_interest_group <= {}
+        if = { limit <= { always = yes } }
+    }
+}
+
+iterator_comparator.2 = {
+    type = character_event
+    immediate = { random_interest_group <= {} }
+}
+
+iterator_comparator.3 = {
+    type = country_event
+    immediate = {
+        "random_interest_group" <= {}
+    }
+}
+
+iterator_comparator.4 = {
+    type = character_event
+    immediate = { iterator_comparator_probe = yes }
+}

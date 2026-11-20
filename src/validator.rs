@@ -2176,20 +2176,29 @@ impl<'a> Validator<'a> {
     }
 
     fn expect_eq_qeq(&self, key: &Token, cmp: Comparator) {
-        #[allow(clippy::collapsible_else_if)]
-        if self.allow_questionmark_equals {
-            if !matches!(cmp, Comparator::Equals(Single | Question)) {
-                let msg = format!("expected `{key} =` or `?=`, found `{cmp}`");
-                let sev = Severity::Error.at_most(self.max_severity);
-                report(ErrorKey::Validation, sev).msg(msg).loc(key).push();
+        Self::check_assignment_comparator(
+            key,
+            cmp,
+            self.allow_questionmark_equals,
+            Severity::Error.at_most(self.max_severity),
+        );
+    }
+
+    pub(crate) fn check_assignment_comparator(
+        key: &Token,
+        cmp: Comparator,
+        allow_questionmark_equals: bool,
+        severity: Severity,
+    ) {
+        let msg = match cmp {
+            Comparator::Equals(Single) => return,
+            Comparator::Equals(Question) if allow_questionmark_equals => return,
+            _ if allow_questionmark_equals => {
+                format!("expected `{key} =` or `?=`, found `{cmp}`")
             }
-        } else {
-            if !matches!(cmp, Comparator::Equals(Single)) {
-                let msg = format!("expected `{key} =`, found `{cmp}`");
-                let sev = Severity::Error.at_most(self.max_severity);
-                report(ErrorKey::Validation, sev).msg(msg).loc(key).push();
-            }
-        }
+            _ => format!("expected `{key} =`, found `{cmp}`"),
+        };
+        report(ErrorKey::Validation, severity).msg(msg).loc(key).push();
     }
 }
 

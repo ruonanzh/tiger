@@ -134,8 +134,26 @@ pub fn validate_effect_internal(
     validate_ifelse_sequence(block, "if", "else_if", "else");
 
     vd.set_allow_questionmark_equals(true);
+    let max_severity = vd.max_severity();
     let mut has_tooltip = false;
-    vd.unknown_fields_cmp(|key, cmp, bv| {
+    vd.unknown_fields_any_cmp(|key, cmp, bv| {
+        let severity = Severity::Error;
+        #[cfg(feature = "vic3")]
+        let severity = if Game::is_vic3()
+            && key.is("random_interest_group")
+            && !key.is_quoted()
+            && cmp == Comparator::AtMost
+            && matches!(bv, BV::Block(_))
+            && sc.scopes(data) == Scopes::Country
+            && data.get_effect(key).is_none()
+            && data.scripted_modifiers.get(key.as_str()).is_none()
+        {
+            // Vic3 1.15 executes this iterator body and saves its scope with this spelling.
+            Severity::Warning
+        } else {
+            severity
+        };
+        Validator::check_assignment_comparator(key, cmp, true, severity.at_most(max_severity));
         has_tooltip |=
             validate_effect_field(caller, key, cmp, bv, data, sc, tooltipped, special_tokens);
     });

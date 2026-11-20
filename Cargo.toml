@@ -25,7 +25,7 @@ rust-version = "1.88"
 [features]
 default = ["ck3"]
 ck3 = ["jomini", "tiger-tables/ck3"]
-vic3 = ["jomini", "tiger-tables/vic3"]
+vic3 = ["jomini", "tiger-tables/vic3", "dep:sha2"]
 imperator = ["jomini", "tiger-tables/imperator"]
 eu5 = ["jomini", "tiger-tables/eu5"]
 jomini = ["image/png", "dep:png"]
@@ -61,6 +61,7 @@ png = { version = "0.18", optional = true }
 rayon = "1.7.0"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+sha2 = { version = "0.10", optional = true }
 strum = { version = "0.28", features = ["phf"] }
 strum_macros = "0.28"
 thiserror = "2"

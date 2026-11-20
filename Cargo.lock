@@ -2646,6 +2646,7 @@ dependencies = [
  "scc",
  "serde",
  "serde_json",
+ "sha2",
  "strum",
  "strum_macros 0.28.0",
  "thiserror",

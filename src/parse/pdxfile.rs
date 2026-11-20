@@ -21,6 +21,8 @@ use crate::token::{Loc, Token};
 
 mod lexer;
 pub mod memory;
+#[cfg(feature = "vic3")]
+mod vic3_stock_braces;
 lalrpop_mod! {
     #[allow(unused_variables)]
     #[allow(unused_imports)]
@@ -37,7 +39,7 @@ static FILE_PARSER: LazyLock<parser::FileParser> = LazyLock::new(parser::FilePar
 /// such as passing `#` as a macro argument in order to comment out the rest of a line.
 pub fn parse_pdx_macro(inputs: &[Token], global: &PdxfileMemory, local: &PdxfileMemory) -> Block {
     let mut combined = CombinedMemory::from_local(global, local.clone());
-    match FILE_PARSER.parse(inputs, &mut combined, Lexer::new(inputs)) {
+    match FILE_PARSER.parse(inputs, &mut combined, None, Lexer::new(inputs)) {
         Ok(block) => block,
         Err(e) => {
             eprintln!("Internal error: re-parsing macro failed.\n{e}");
@@ -47,14 +49,19 @@ pub fn parse_pdx_macro(inputs: &[Token], global: &PdxfileMemory, local: &Pdxfile
 }
 
 /// Parse a whole file into a `Block`.
-fn parse_pdx(entry: &FileEntry, content: &'static str, memory: &ParserMemory) -> Block {
+fn parse_pdx(
+    entry: &FileEntry,
+    content: &'static str,
+    memory: &ParserMemory,
+    stock_unclosed_block: Option<(u32, u32)>,
+) -> Block {
     let file_loc = Loc::from(entry);
     let mut loc = file_loc;
     loc.line = 1;
     loc.column = 1;
     let inputs = [Token::from_static_str(content, loc)];
     let mut combined = CombinedMemory::new(&memory.pdxfile);
-    match FILE_PARSER.parse(&inputs, &mut combined, Lexer::new(&inputs)) {
+    match FILE_PARSER.parse(&inputs, &mut combined, stock_unclosed_block, Lexer::new(&inputs)) {
         Ok(mut block) => {
             block.loc = file_loc;
             block
@@ -74,8 +81,17 @@ pub fn parse_pdx_file(
     parser: &ParserMemory,
 ) -> Block {
     let content = content.leak();
-    store_source_file(entry.fullpath().to_path_buf(), &content[offset..]);
-    parse_pdx(entry, &content[offset..], parser)
+    let content = &content[offset..];
+    store_source_file(entry.fullpath().to_path_buf(), content);
+    #[cfg(not(feature = "vic3"))]
+    let stock_unclosed_block = None;
+    #[cfg(feature = "vic3")]
+    let stock_unclosed_block = if Game::is_vic3() {
+        vic3_stock_braces::opening_position(entry.path(), content)
+    } else {
+        None
+    };
+    parse_pdx(entry, content, parser, stock_unclosed_block)
 }
 
 /// Parse the content associated with the [`FileEntry`], and update the global parser memory.
@@ -94,7 +110,7 @@ pub fn parse_reader_export(
     loc.column = 1;
     let inputs = [Token::from_static_str(content, loc)];
     let mut combined = CombinedMemory::new(global);
-    match FILE_PARSER.parse(&inputs, &mut combined, Lexer::new(&inputs)) {
+    match FILE_PARSER.parse(&inputs, &mut combined, None, Lexer::new(&inputs)) {
         Ok(_) => {
             global.merge(combined.into_local());
         }
@@ -113,7 +129,7 @@ pub fn parse_pdx_internal(input: &'static str, desc: &str) -> Block {
         FileKind::Internal,
         PathBuf::from(desc),
     );
-    parse_pdx(&entry, input, &ParserMemory::default())
+    parse_pdx(&entry, input, &ParserMemory::default(), None)
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]

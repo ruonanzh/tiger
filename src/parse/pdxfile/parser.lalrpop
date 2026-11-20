@@ -7,7 +7,11 @@ use crate::parse::pdxfile::{HasMacroParams, define_var, warn_macros, split_macro
 use crate::report::{err, warn, ErrorKey};
 use crate::token::Token;
 
-grammar<'memory>(inputs: &[Token], memory: &mut CombinedMemory<'memory>);
+grammar<'memory>(
+    inputs: &[Token],
+    memory: &mut CombinedMemory<'memory>,
+    stock_unclosed_block: Option<(u32, u32)>,
+);
 
 /// A file is parsed as an undelimited [`Block`].
 pub File: Block = {
@@ -35,8 +39,13 @@ pub Block: (Block, HasMacroParams) = {
     // Error handling: generic
     <loc:"{"> <mut block:BlockContents> <error:!> => {
         if let ParseError::UnrecognizedEof { .. } = error.error {
-            let msg = "opening { was never closed";
-            err(ErrorKey::BraceError).msg(msg).loc(loc.get_loc()).push();
+            let opening = loc.get_loc();
+            let diagnostic = if stock_unclosed_block == Some((opening.line, opening.column)) {
+                warn(ErrorKey::BraceError)
+            } else {
+                err(ErrorKey::BraceError)
+            };
+            diagnostic.msg("opening { was never closed").loc(opening).push();
         } else {
             report_error(error.error, inputs[0].loc);
         }
