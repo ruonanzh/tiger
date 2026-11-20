@@ -161,6 +161,9 @@ pub enum Reason {
     Name(Token),
     /// The named scope's type is inferred from use without a proven source.
     InferredScope(Token),
+    /// A lookup may fall back to the enclosing contextless journal entry.
+    #[cfg(feature = "vic3")]
+    JournalEntryFallback(Token, Option<&'static str>),
     /// The scope was supplied by the game engine. The `Token` points at a key explaining this, for
     /// example the key of an `Item` or the field key of a trigger or effect in an item.
     Builtin(Token),
@@ -209,9 +212,29 @@ const THIS: usize = 1;
 const PREV: usize = 2;
 
 impl Reason {
+    #[allow(unused_variables)] // scopes and source are only needed for Vic3
+    fn requirement_is_uncertain(&self, scopes: Scopes, source: &Self, data: &Everything) -> bool {
+        #[cfg(feature = "vic3")]
+        if Game::is_vic3()
+            && scopes == Scopes::None
+            && let (Self::JournalEntryFallback(_, target), Self::Builtin(origin)) = (self, source)
+            && target.is_none_or(|name| origin.is(name))
+        {
+            use crate::item::Item;
+            let journal = Item::JournalEntry;
+            return data
+                .get_key_block(journal, origin.as_str())
+                .is_some_and(|(key, _)| key.loc == origin.loc)
+                && data.item_has_property(journal, origin.as_str(), "none_context");
+        }
+        self.is_runtime_inferred(data)
+    }
+
     pub fn token(&self) -> &Token {
         match self {
             Reason::Token(t) | Reason::Name(t) | Reason::InferredScope(t) | Reason::Builtin(t) => t,
+            #[cfg(feature = "vic3")]
+            Reason::JournalEntryFallback(t, _) => t,
             #[cfg(feature = "vic3")]
             Reason::MultiplierBug(t) => t,
             #[cfg(feature = "jomini")]
@@ -255,6 +278,8 @@ impl Reason {
             Reason::Token(t) => Cow::Owned(format!("deduced from `{t}` here")),
             Reason::Name(_) => Cow::Borrowed("deduced from the scope's name"),
             Reason::InferredScope(t) => Cow::Owned(format!("inferred from `{t}` here")),
+            #[cfg(feature = "vic3")]
+            Reason::JournalEntryFallback(t, _) => Cow::Owned(format!("deduced from `{t}` here")),
             Reason::Builtin(_) => Cow::Borrowed("supplied by the game engine"),
             #[cfg(feature = "vic3")]
             Reason::MultiplierBug(_) => {
@@ -1348,7 +1373,12 @@ impl ScopeContext {
                     let token = reason.token();
                     let msg = format!("`{token}` is for {scopes} but scope seems to be {s}");
                     let msg2 = format!("scope was {}", r.msg());
-                    r.scope_diagnostic(data).msg(msg).loc(token).loc_msg(r.token(), msg2).push();
+                    let diagnostic = if reason.requirement_is_uncertain(*s, r, data) {
+                        tips(ErrorKey::Scopes).weak()
+                    } else {
+                        r.scope_diagnostic(data)
+                    };
+                    diagnostic.msg(msg).loc(token).loc_msg(r.token(), msg2).push();
                 }
             }
             #[cfg(feature = "jomini")]
@@ -1401,7 +1431,7 @@ impl ScopeContext {
                     );
                     let msg2 = format!("expected {report} was {}", reason.msg());
                     let msg3 = format!("actual {report} was {}", r.msg());
-                    let diagnostic = if reason.is_runtime_inferred(data) {
+                    let diagnostic = if reason.requirement_is_uncertain(*s, r, data) {
                         tips(ErrorKey::Scopes).weak()
                     } else {
                         r.scope_diagnostic(data)

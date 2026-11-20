@@ -1,4 +1,5 @@
 use crate::block::Block;
+use crate::context::ScopeContext;
 use crate::db::{Db, DbKind};
 use crate::everything::Everything;
 use crate::game::GameFlags;
@@ -6,6 +7,7 @@ use crate::helpers::stringify_choices;
 use crate::item::{Item, ItemLoader};
 use crate::report::{ErrorKey, warn};
 use crate::scopes::Scopes;
+use crate::script_value::validate_script_value;
 use crate::token::Token;
 use crate::tooltipped::Tooltipped;
 use crate::validator::Validator;
@@ -49,7 +51,11 @@ impl DbKind for Ideology {
                 Scopes::Character,
             );
             vd.field_script_value_rooted("interest_group_leader_weight", Scopes::InterestGroup);
-            vd.field_script_value_rooted("non_interest_group_leader_weight", Scopes::Character);
+            vd.field_validated_key("non_interest_group_leader_weight", |key, bv, data| {
+                // The callback's character receiver is inferred from the companion trigger.
+                let mut sc = ScopeContext::new_inferred_root(Scopes::Character, key);
+                validate_script_value(bv, data, &mut sc);
+            });
             vd.ban_field("priority", || "character_ideology = no");
         } else {
             vd.ban_field("country_trigger", || "character_ideology = yes");

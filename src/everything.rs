@@ -1319,19 +1319,25 @@ impl Everything {
                     } else {
                         format!("{itype} {key} not defined in {path}")
                     };
-                    let confidence = itype.confidence();
+                    let severity = itype.severity().at_most(max_sev);
                     #[cfg(feature = "vic3")]
-                    let confidence = if Game::is_vic3()
-                        && itype == Item::Sound
-                        && (key.starts_with("event:/") || key.starts_with("snapshot:/"))
-                        && !self.vic3_sound_paths.is_empty()
-                    {
-                        crate::Confidence::Reasonable
-                    } else {
-                        confidence
+                    let severity = match itype {
+                        Item::InfamyThreshold if Game::is_vic3() => {
+                            severity.at_most(Severity::Warning)
+                        }
+                        // The exported catalog is evidence of presence, but it does not enumerate
+                        // every path that runtime audio banks can provide.
+                        Item::Sound
+                            if Game::is_vic3()
+                                && (Lowercase::new(key).as_str().starts_with("event:/")
+                                    || Lowercase::new(key).as_str().starts_with("snapshot:/")) =>
+                        {
+                            severity.at_most(Severity::Tips)
+                        }
+                        _ => severity,
                     };
-                    report(ErrorKey::MissingItem, itype.severity().at_most(max_sev))
-                        .conf(confidence)
+                    report(ErrorKey::MissingItem, severity)
+                        .conf(itype.confidence())
                         .msg(msg)
                         .loc(token)
                         .push();

@@ -483,7 +483,17 @@ pub fn validate_effect_field(
             err(ErrorKey::Validation).msg(msg).loc(key).push();
             return false;
         }
-        sc.expect(inscopes, &Reason::Token(key.clone()), data);
+        let reason = Reason::Token(key.clone());
+        #[cfg(feature = "vic3")]
+        let reason = if Game::is_vic3()
+            && inscopes == Scopes::JournalEntry
+            && it_name.as_str() == "scope_je_involved"
+        {
+            Reason::JournalEntryFallback(key.clone(), None)
+        } else {
+            reason
+        };
+        sc.expect(inscopes, &reason, data);
         if let Some(b) = bv.expect_block() {
             precheck_iterator_fields(ltype, it_name.as_str(), b, data, sc);
             sc.open_scope(outscope, key.clone());

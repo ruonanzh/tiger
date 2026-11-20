@@ -152,7 +152,8 @@ impl DbKind for PoliticalMovement {
         );
         vd.field_script_value_rooted("active_law_radicalism_multiplier", Scopes::PoliticalMovement);
         vd.field_validated_key("additional_radicalism_factors", |key, bv, data| {
-            let mut sc = ScopeContext::new(Scopes::PoliticalMovement, key);
+            // The format guide describes the factor without specifying the callback root.
+            let mut sc = ScopeContext::new_inferred_root(Scopes::PoliticalMovement, key);
             sc.define_name("culture", Scopes::Culture, key);
             sc.define_name("religion", Scopes::Religion, key);
             validate_script_value(bv, data, &mut sc);

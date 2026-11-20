@@ -1922,7 +1922,17 @@ pub fn validate_inscopes(
     if inscopes == Scopes::None && !part_flags.contains(PartFlags::First) {
         warn_not_first(name);
     }
-    sc.expect(inscopes, &Reason::Token(name.clone()), data);
+    let reason = if Game::is_vic3()
+        && part_flags.contains(PartFlags::Question)
+        && sc.scopes(data) == Scopes::all()
+        && (name.lowercase_is("owner") || !part_flags.contains(PartFlags::First))
+    {
+        // A guarded lookup cannot establish the contract of an otherwise unknown receiver.
+        Reason::InferredScope(name.clone())
+    } else {
+        Reason::Token(name.clone())
+    };
+    sc.expect(inscopes, &reason, data);
 }
 
 #[allow(unused_variables)] // imperator does not use sc
@@ -2040,7 +2050,41 @@ pub fn validate_argument_scope(
     data: &Everything,
     sc: &mut ScopeContext,
 ) {
-    validate_inscopes(part_flags, func, inscopes, sc, data);
+    #[cfg(feature = "vic3")]
+    let contextual_receiver = Game::is_vic3()
+        && ((func.lowercase_is("py")
+            && sc.scopes(data) == Scopes::InterestGroup
+            && data.item_exists(Item::Party, arg.as_str()))
+            || (func.lowercase_is("je")
+                && data.item_exists(Item::JournalEntry, arg.as_str())
+                && part_flags.contains(PartFlags::Question)
+                && sc.scopes(data).intersects(Scopes::JournalEntry | Scopes::State)
+                && !sc.scopes(data).intersects(inscopes)));
+    #[cfg(not(feature = "vic3"))]
+    let contextual_receiver = false;
+    if contextual_receiver {
+        // These lookups may be resolved against the owner or a contextless journal entry.
+        // Keep the exported receiver signature and make an unresolved fallback advisory.
+        sc.expect(inscopes, &Reason::InferredScope(func.clone()), data);
+    } else {
+        #[cfg(feature = "vic3")]
+        let contextless_journal_lookup = Game::is_vic3()
+            && func.lowercase_is("je")
+            && part_flags.contains(PartFlags::Question)
+            && data.item_has_property(Item::JournalEntry, arg.as_str(), "none_context");
+        #[cfg(not(feature = "vic3"))]
+        let contextless_journal_lookup = false;
+        if contextless_journal_lookup {
+            #[cfg(feature = "vic3")]
+            sc.expect(
+                inscopes,
+                &Reason::JournalEntryFallback(func.clone(), Some(arg.as_str())),
+                data,
+            );
+        } else {
+            validate_inscopes(part_flags, func, inscopes, sc, data);
+        }
+    }
     match validation {
         #[cfg(feature = "vic3")]
         ArgumentValue::Item(item @ (Item::Country | Item::StateRegion))

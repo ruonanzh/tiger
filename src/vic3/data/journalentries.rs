@@ -41,17 +41,7 @@ impl DbKind for JournalEntry {
         data.mark_used(Item::Localization, &loca);
 
         vd.field_choice("context", &["none", "country"]);
-        let sc_context = match block.get_field_value("context").map(Token::as_str) {
-            Some("country") => Scopes::Country,
-            Some("none") => Scopes::None,
-            _ if block.get_field_value("group").is_some_and(|group| {
-                data.item_has_property(Item::JournalEntryGroup, group.as_str(), "none_context")
-            }) =>
-            {
-                Scopes::None
-            }
-            _ => Scopes::Country,
-        };
+        let sc_context = if contextless(block, data) { Scopes::None } else { Scopes::Country };
         let mut sc = ScopeContext::new(sc_context, key);
         sc.define_name("journal_entry", Scopes::JournalEntry, key);
         sc.define_name("target", Scopes::all(), key);
@@ -284,6 +274,20 @@ impl DbKind for JournalEntry {
             sc.mark_root_inferred(callback);
         }
         vd.field_trigger("is_shown_in_lobby", Tooltipped::No, &mut sc);
+    }
+
+    fn has_property(&self, _key: &Token, block: &Block, property: &str, data: &Everything) -> bool {
+        property == "none_context" && contextless(block, data)
+    }
+}
+
+fn contextless(block: &Block, data: &Everything) -> bool {
+    match block.get_field_value("context").map(Token::as_str) {
+        Some("country") => false,
+        Some("none") => true,
+        _ => block.get_field_value("group").is_some_and(|group| {
+            data.item_has_property(Item::JournalEntryGroup, group.as_str(), "none_context")
+        }),
     }
 }
 
