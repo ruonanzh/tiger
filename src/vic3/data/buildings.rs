@@ -146,7 +146,6 @@ impl DbKind for BuildingType {
         vd.field_bool("company_headquarter");
 
         vd.multi_field_list_items("unlocking_technologies", Item::Technology);
-        vd.uncertain_field("disallowing_laws");
         vd.field_trigger("potential", Tooltipped::No, &mut state_sc);
         vd.field_trigger("possible", Tooltipped::No, &mut state_sc);
         vd.field_trigger("can_build", Tooltipped::Yes, &mut state_sc);

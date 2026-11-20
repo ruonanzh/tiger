@@ -46,7 +46,6 @@ impl DbKind for Country {
         vd.field_item("capital", Item::StateRegion);
         vd.field_bool("is_named_from_capital");
         vd.field_bool("dynamic_country_definition");
-        vd.uncertain_field("possible");
         vd.field_validated_block("regnal_numbers", |block, data| {
             let mut vd = Validator::new(block, data);
             let mut names = TigerHashMap::default();
@@ -175,7 +174,6 @@ impl DbKind for CountryFormation {
 
         vd.field_bool("use_culture_states");
         vd.field_numeric("required_states_fraction");
-        vd.uncertain_field("required_num_states");
         vd.field_list_items("states", Item::StateRegion);
 
         if block.field_value_is("is_major_formation", "yes") {
@@ -232,7 +230,6 @@ impl DbKind for CountryCreation {
 
         vd.field_bool("use_culture_states");
         vd.field_integer("required_num_states");
-        vd.uncertain_field("required_states_fraction");
         vd.field_list_items("states", Item::StateRegion);
         vd.field_list_items("provinces", Item::Province);
 
