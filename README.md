@@ -68,7 +68,9 @@ _(Note that the quote marks around the path are important because of the spaces 
 
 ### How to configure
 
-You can place a file `ck3-tiger.conf` (or `vic3-tiger.conf` or `imperator.conf`) in your mod's directory. You can use it to select which languages to check localizations for, and to suppress messages about things you don't want to fix.
+Crusader Kings 3 and Imperator can discover `ck3-tiger.conf` and `imperator-tiger.conf` in the mod directory. A config file can select languages for localization checks and filter reports.
+
+Victoria 3 uses built-in validation settings by default, including in `vic3-tiger-auto`. If you maintain your own validation settings, supply the file explicitly with `vic3-tiger --config PATH MODPATH`. Use `--single-mod` to validate the selected mod and base game with built-in settings. Both `--single-mod` and `--no-config` reject `--config` and `--suppress`. Victoria 3 treats `#tiger-ignore` annotations as ordinary comments.
 
 There is a sample [`ck3-tiger.conf`](ck3-tiger.conf) file, [`vic3-tiger.conf`](vic3-tiger.conf) file, and [`imperator-tiger.conf`](imperator-tiger.conf) file in the release, with an explanation of what goes in it. There is also a [guide](filter.md).
 

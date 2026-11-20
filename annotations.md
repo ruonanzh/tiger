@@ -1,4 +1,4 @@
-You can suppress tiger's messages about specific parts of your mod by leaving special comments in your mod files. This can be helpful if tiger is mistaken, or if you just don't want to deal with certain warnings.
+In games other than Victoria 3, you can suppress tiger's messages about specific parts of your mod by leaving special comments in your mod files.
 
 ### Basic use
 

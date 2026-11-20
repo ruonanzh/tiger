@@ -13,6 +13,7 @@ use std::sync::{LazyLock, Mutex, MutexGuard};
 
 use encoding_rs::{UTF_8, WINDOWS_1252};
 
+use crate::Game;
 use crate::helpers::{TigerHashMap, TigerHashSet};
 use crate::macros::MACRO_MAP;
 use crate::parse::ignore::IgnoreFilter;
@@ -387,6 +388,9 @@ pub fn register_ignore_filter<R>(pathname: &'static Path, lines: R, filter: Igno
 where
     R: RangeBounds<u32>,
 {
+    if Game::is_vic3() {
+        return;
+    }
     let start = lines.start_bound().cloned();
     let end = lines.end_bound().cloned();
     let entry = IgnoreEntry { start, end, filter };

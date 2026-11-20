@@ -1,7 +1,7 @@
 //! Loading and interpreting the config file.
 //!
-//! The config file is located at the top level of the mod and is named after the validator, for
-//! example `ck3-tiger.conf`.
+//! Games with automatic config discovery look at the top level of the mod for a file named
+//! after the validator, for example `ck3-tiger.conf`.
 
 use std::path::PathBuf;
 

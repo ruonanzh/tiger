@@ -11,13 +11,13 @@ fn write(root: &Path, relative: &str, contents: &str) {
 }
 
 #[test]
-fn single_mod_ignores_dependencies_and_preserves_config() {
+fn victoria_3_uses_built_in_settings_unless_config_is_explicit() {
     let fixture = tempfile::tempdir().unwrap();
     let game = fixture.path().join("game_install");
     let mod_dir = fixture.path().join("target_mod");
     let workshop = fixture.path().join("workshop");
     let workshop_mod = workshop.join("4100000000");
-    let local_mod = mod_dir.join("local_addon");
+    let local_mod = fixture.path().join("local_addon");
     let triggers = "common/scripted_triggers/target.txt";
 
     for dir in ["jomini", "clausewitz"] {
@@ -42,18 +42,24 @@ fn single_mod_ignores_dependencies_and_preserves_config() {
     write(
         &mod_dir,
         triggers,
-        "\u{feff}own_rule = { always = yes }\nprobe = { base_rule = yes own_rule = yes \
+        "\u{feff}#tiger-ignore(file)\nown_rule = { always = yes }\nprobe = { base_rule = yes own_rule = yes \
          workshop_rule = yes local_rule = yes filtered_rule = yes }",
     );
-    write(&mod_dir, "localization/french/bad_l_french.yml", "\u{feff}invalid header\n");
+    write(
+        &mod_dir,
+        "localization/french/bad_l_french.yml",
+        "\u{feff}l_french:\n #tiger-ignore(file)\n probe:0 without quotes\n",
+    );
 
-    let validate = |single_mod| {
+    let validation_command = |cwd: &Path| {
         let mut command = Command::new(env!("CARGO_BIN_EXE_vic3-tiger"));
+        command.current_dir(cwd);
         command.args(["--json", "--game"]).arg(&game).arg("--workshop").arg(&workshop);
-        if single_mod {
-            command.arg("--single-mod");
-        }
-        let result = command.arg(&mod_dir).output().unwrap();
+        command.arg(&mod_dir);
+        command
+    };
+    let validate = |cwd: &Path, args: &[&str]| {
+        let result = validation_command(cwd).args(args).output().unwrap();
         assert!(result.status.success(), "{}", String::from_utf8_lossy(&result.stderr));
         let reports: Vec<Value> = serde_json::from_slice(&result.stdout).unwrap();
         reports
@@ -79,21 +85,37 @@ fn single_mod_ignores_dependencies_and_preserves_config() {
         })
     };
 
-    let unconfigured = validate(false);
-    assert_rules(&unconfigured, &["filtered_rule", "local_rule", "workshop_rule"]);
+    let expected = &["filtered_rule", "local_rule", "workshop_rule"];
+    let unconfigured = validate(fixture.path(), &[]);
+    assert_rules(&unconfigured, expected);
     assert!(reports_french(&unconfigured), "{unconfigured:#?}");
 
-    write(
-        &mod_dir,
-        "vic3-tiger.conf",
-        "\u{feff}load_mod = { workshop_id = 4100000000 }\nload_mod = { mod = \"local_addon\" }\n\
-         languages = { check = \"english\" }\nfilter = { trigger = { NOT = { text = \"filtered_rule\" } } }\n",
-    );
-    let with_dependencies = validate(false);
+    let config_contents = "\u{feff}load_mod = { workshop_id = 4100000000 }\nload_mod = { mod = \"local_addon\" }\n\
+         languages = { check = \"english\" }\nfilter = { trigger = { NOT = { text = \"filtered_rule\" } } }\n";
+    write(&mod_dir, "vic3-tiger.conf", config_contents);
+    write(fixture.path(), "vic3-tiger.conf", config_contents);
+    let mod_subdirectory = mod_dir.join("common");
+    write(&mod_subdirectory, "vic3-tiger.conf", config_contents);
+    for cwd in [fixture.path(), &mod_dir, &mod_subdirectory] {
+        for args in [&[][..], &["--single-mod"][..], &["--single-mod", "--no-config"][..]] {
+            let reports = validate(cwd, args);
+            assert_rules(&reports, expected);
+            assert!(reports_french(&reports), "{reports:#?}");
+        }
+    }
+
+    write(fixture.path(), "maintainer.conf", config_contents);
+    let with_dependencies = validate(fixture.path(), &["--config", "maintainer.conf"]);
     assert_rules(&with_dependencies, &[]);
     assert!(!reports_french(&with_dependencies), "{with_dependencies:#?}");
 
-    let isolated = validate(true);
-    assert_rules(&isolated, &["local_rule", "workshop_rule"]);
-    assert!(!reports_french(&isolated), "{isolated:#?}");
+    write(&mod_dir, "suppress.json", "[]");
+    for mode in ["--single-mod", "--no-config"] {
+        for (flag, file) in [("--config", "vic3-tiger.conf"), ("--suppress", "suppress.json")] {
+            let result = validation_command(&mod_dir).args([mode, flag, file]).output().unwrap();
+            let stderr = String::from_utf8_lossy(&result.stderr);
+            assert_eq!(result.status.code(), Some(2), "{stderr}");
+            assert!(stderr.contains("cannot be used with") && stderr.contains(flag), "{stderr}");
+        }
+    }
 }

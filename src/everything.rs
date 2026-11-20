@@ -425,7 +425,8 @@ impl Everything {
     /// will be loaded. This will seriously affect validation, but it's ok if you just want to load
     /// and examine the mod files.
     ///
-    /// `mod_root` is the path to the mod files. The config file will also be looked for there.
+    /// `mod_root` is the path to the mod files. Games other than Victoria 3 also look there
+    /// for a default config file.
     ///
     /// `replace_paths` is from the similarly named field in the `.mod` file.
     pub fn new(
@@ -445,15 +446,14 @@ impl Everything {
         )
     }
 
-    /// Validate the base game and one mod while ignoring secondary mods in the config.
+    /// Validate the base game and one mod with the built-in settings.
     #[cfg(feature = "vic3")]
     pub fn new_single_mod(
-        config_filepath: Option<&Path>,
         vanilla_dir: Option<&Path>,
         mod_root: &Path,
         replace_paths: Vec<PathBuf>,
     ) -> Result<Self> {
-        Self::new_with_config(config_filepath, vanilla_dir, None, mod_root, replace_paths)
+        Self::new_with_config(None, vanilla_dir, None, mod_root, replace_paths)
     }
 
     fn new_with_config(
@@ -483,7 +483,7 @@ impl Everything {
             None => mod_root.join(config_file_name),
         };
 
-        let config = if config_file.is_file() {
+        let config = if (config_filepath.is_some() || !Game::is_vic3()) && config_file.is_file() {
             Self::read_config(config_file_name, &config_file)
                 .ok_or(FilesError::ConfigUnreadable { path: config_file })?
         } else {

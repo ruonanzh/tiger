@@ -60,10 +60,14 @@ struct ValidateArgs {
     #[cfg_attr(any(feature = "vic3", feature = "eu5"), clap(long))]
     /// Path to game workshop directory.
     workshop: Option<PathBuf>,
-    /// Validate only this mod and the base game, ignoring secondary mods in the config.
+    /// Validate only this mod and the base game with built-in validation rules.
     #[cfg(feature = "vic3")]
-    #[clap(long)]
+    #[clap(long, conflicts_with_all = ["config", "suppress"])]
     single_mod: bool,
+    /// Use built-in validation settings and reject external config and suppression files.
+    #[cfg(feature = "vic3")]
+    #[clap(long = "no-config", conflicts_with_all = ["config", "suppress"])]
+    _no_config: bool,
     #[cfg_attr(not(any(feature = "ck3", feature = "imperator", feature = "hoi4")), clap(skip))]
     #[cfg_attr(any(feature = "ck3", feature = "imperator", feature = "hoi4"), clap(long))]
     /// Path to paradox directory
@@ -264,7 +268,6 @@ pub fn run(
                 everything = match load_secondary_mods {
                     #[cfg(feature = "vic3")]
                     false => Everything::new_single_mod(
-                        args.config.as_deref(),
                         args.game.as_deref(),
                         &args.modpath,
                         metadata.replace_paths(),
