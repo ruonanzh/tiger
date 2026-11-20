@@ -5,6 +5,7 @@ use crate::everything::Everything;
 use crate::game::GameFlags;
 use crate::item::{Item, ItemLoader};
 use crate::modif::validate_modifs;
+use crate::report::{ErrorKey, tips};
 use crate::scopes::Scopes;
 use crate::token::Token;
 use crate::tooltipped::Tooltipped;
@@ -218,7 +219,17 @@ fn validate_pact(block: &Block, data: &Everything, sc: &mut ScopeContext) {
     vd.field_bool("income_transfer_based_on_second_country");
     vd.field_validated_block("income_transfer_to_pops", |block, data| {
         let mut vd = Validator::new(block, data);
-        vd.replaced_field("allow_discriminated", "allow_non_fully_accepted");
+        vd.multi_field_validated_key("allow_discriminated", |key, bv, data| {
+            if let Some(value) = bv.expect_value() {
+                ValueValidator::new(value, data).bool();
+            }
+            tips(ErrorKey::Validation)
+                .weak()
+                .msg("`allow_discriminated` compatibility needs verification")
+                .info("Victoria 3 1.15 uses `allow_non_fully_accepted` in bundled actions. Verify the behavior of this legacy field before migrating.")
+                .loc(key)
+                .push();
+        });
         vd.field_bool("allow_non_fully_accepted");
         for field in &["upper_strata_pops", "middle_strata_pops", "lower_strata_pops"] {
             vd.field_script_value(field, sc);

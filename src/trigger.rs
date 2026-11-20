@@ -2051,6 +2051,29 @@ pub fn validate_argument_scope(
     validate_inscopes(part_flags, func, inscopes, sc, data);
     match validation {
         #[cfg(feature = "vic3")]
+        ArgumentValue::Item(item @ (Item::Country | Item::StateRegion))
+            if Game::is_vic3()
+                && part_flags.contains(PartFlags::First | PartFlags::Question)
+                && (func.lowercase_is("c")
+                    || func.lowercase_is("cd")
+                    || func.lowercase_is("s"))
+                && part.as_str().split_once(':') == Some((func.as_str(), arg.as_str()))
+                && !arg.is("")
+                && arg
+                    .as_str()
+                    .bytes()
+                    .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_') =>
+        {
+            if !data.item_exists(item, arg.as_str()) {
+                tips(ErrorKey::MissingItem)
+                    .weak()
+                    .msg(format!("{item} {arg} not defined in {}", item.path()))
+                    .info("This lookup is guarded by `?=`. Verify that an absent definition is intended.")
+                    .loc(arg)
+                    .push();
+            }
+        }
+        #[cfg(feature = "vic3")]
         ArgumentValue::Item(Item::InterestGroup)
             if Game::is_vic3()
                 && (func.lowercase_is("ig") || func.lowercase_is("ig_type"))
