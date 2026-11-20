@@ -165,6 +165,7 @@ const TRIGGER: &[(Scopes, &str, Trigger)] = &[
     (Scopes::Country, "can_own_autonomy_be_decreased", Boolean),
     (Scopes::Company, "can_potentially_produce_prestige_goods", Item(Item::PrestigeGoods)),
     (Scopes::Building, "can_queue_building_levels", CompareValue),
+    (Scopes::Country, "can_regime_change", Scope(Scopes::Country)),
     (Scopes::Country, "can_research", Item(Item::Technology)),
     (
         Scopes::Country,
@@ -688,6 +689,7 @@ const TRIGGER: &[(Scopes, &str, Trigger)] = &[
             ("region", Scope(Scopes::StrategicRegion)),
         ]),
     ),
+    (Scopes::MilitaryFormation, "has_naval_mission_without_area", Boolean),
     (Scopes::MilitaryFormation, "has_naval_mission_with_invalid_area", Boolean),
     (Scopes::InterestGroup, "has_negotiated", Boolean),
     (
@@ -900,6 +902,11 @@ const TRIGGER: &[(Scopes, &str, Trigger)] = &[
     (Scopes::Character, "is_busy", Boolean),
     (Scopes::State, "is_capital", Boolean),
     (Scopes::Character, "is_character_alive", Boolean),
+    (
+        Scopes::Country.union(Scopes::Character),
+        "is_character_interaction_available",
+        Item(Item::CharacterInteraction),
+    ),
     (Scopes::CharacterRole, "is_character_role", Item(Item::CharacterRole)),
     (Scopes::CharacterRole, "is_character_role_type", Item(Item::CharacterArchetype)),
     (Scopes::CivilWar, "is_civil_war_type", Choice(&["revolution", "secession"])),

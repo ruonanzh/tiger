@@ -149,6 +149,94 @@ pub fn validate_add_journalentry(
     vd.field_target("target", sc, Scopes::all());
 }
 
+pub fn note_conclude_journal_entry_version(
+    key: &Token,
+    _bv: &BV,
+    data: &Everything,
+    _sc: &mut ScopeContext,
+    _tooltipped: Tooltipped,
+) {
+    let message = if data.vic3_version_is_known() {
+        "conclude_journal_entry was introduced in Victoria 3 1.15.2"
+    } else {
+        "conclude_journal_entry requires Victoria 3 1.15.2 or later; the game version is unknown"
+    };
+    tips(ErrorKey::Validation).weak().msg(message).loc(key).push();
+}
+
+pub fn validate_conclude_journal_entry(
+    _key: &Token,
+    _block: &Block,
+    data: &Everything,
+    _sc: &mut ScopeContext,
+    mut vd: Validator,
+    _tooltipped: Tooltipped,
+) {
+    vd.req_field("type");
+    vd.req_field("outcome");
+    vd.field_bool("hidden");
+    let journal = vd.field_value("type").cloned();
+    let outcome = vd.field_value("outcome");
+    let Some(journal) = journal.as_ref() else {
+        return;
+    };
+
+    let is_literal = |token: &Token| {
+        !token.as_str().is_empty()
+            && token.as_str().chars().all(|c| c.is_alphanumeric() || "_-.".contains(c))
+    };
+    if !is_literal(journal) {
+        let msg = format!("cannot verify journal entry type {}", journal);
+        tips(ErrorKey::Validation).weak().msg(msg).loc(journal).push();
+        return;
+    }
+    let Some((_, definition)) = data.get_key_block(Item::JournalEntry, journal.as_str()) else {
+        data.verify_exists(Item::JournalEntry, journal);
+        return;
+    };
+    let Some(outcome) = outcome else {
+        return;
+    };
+
+    let outcomes = definition.get_field_blocks("outcome");
+    let matching = outcomes.iter().filter(|block| {
+        is_literal(outcome) && block.field_value_is("effect_header", outcome.as_str())
+    });
+    let mut unproven_match = false;
+    for block in matching {
+        let regular = block.get_field("flags").is_none_or(|flags| {
+            flags.get_block().is_some_and(|flags| {
+                flags.iter_values().all(|flag| {
+                    is_literal(flag) && !flag.is("timeout") && !flag.is("invalid_outcome")
+                })
+            })
+        });
+        if regular && !block.has_key("inline_script") {
+            return;
+        }
+        unproven_match = true;
+    }
+
+    let incomplete = !is_literal(outcome)
+        || !definition.macro_parms().is_empty()
+        || definition.has_key("inline_script")
+        || outcomes.iter().any(|block| {
+            block.has_key("inline_script")
+                || block
+                    .get_field("effect_header")
+                    .is_some_and(|value| !value.get_value().is_some_and(is_literal))
+        });
+    if unproven_match || incomplete {
+        let msg =
+            format!("cannot verify a regular outcome {} for journal entry {}", outcome, journal);
+        tips(ErrorKey::Validation).weak().msg(msg).loc(outcome).push();
+    } else {
+        let msg =
+            format!("journal entry {} has no outcome with effect_header {}", journal, outcome);
+        err(ErrorKey::Validation).msg(msg).loc(outcome).push();
+    }
+}
+
 pub fn validate_add_loyalists(
     _key: &Token,
     _block: &Block,

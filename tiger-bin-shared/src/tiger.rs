@@ -17,6 +17,9 @@ use crate::gamedir::{
     find_game_directory_steam, find_paradox_directory, find_workshop_directory_steam,
 };
 use crate::update::update;
+#[cfg(feature = "vic3")]
+use crate::version::show_vic3_version_banner;
+#[cfg(not(feature = "vic3"))]
 use crate::version::warn_versions;
 
 #[derive(Parser)]
@@ -103,8 +106,9 @@ pub fn run(
 ) -> Result<()> {
     use clap::{CommandFactory, FromArgMatches};
 
-    let &GameConsts { name, name_short, version, app_id, signature_file, paradox_dir } =
-        game_consts;
+    let &GameConsts { name_short, version, app_id, signature_file, paradox_dir, .. } = game_consts;
+    #[cfg(not(feature = "vic3"))]
+    let name = game_consts.name;
 
     let matches = Cli::command().version(current_version).name(bin_name).get_matches();
     let cli = Cli::from_arg_matches(&matches).map_err(|err| err.exit()).unwrap();
@@ -164,9 +168,14 @@ pub fn run(
                 bail!("Cannot find {name_short} directory. Please supply it as the --game option.");
             }
 
-            if let Some(ref game_dir) = args.game {
-                if let Ok(launcher_game_version) = get_version_from_launcher(game_dir) {
-                    if warn_versions(name, version, &launcher_game_version).is_err() {
+            let launcher_game_version =
+                args.game.as_deref().and_then(|game_dir| get_version_from_launcher(game_dir).ok());
+            #[cfg(feature = "vic3")]
+            show_vic3_version_banner(version, launcher_game_version.as_deref());
+            #[cfg(not(feature = "vic3"))]
+            if args.game.is_some() {
+                if let Some(ref launcher_game_version) = launcher_game_version {
+                    if warn_versions(name, version, launcher_game_version).is_err() {
                         eprintln!("Tiger was made for {name} version {version}.");
                         eprintln!(
                             "Comparing this to the game's version {launcher_game_version} failed."
@@ -253,6 +262,9 @@ pub fn run(
                     metadata.replace_paths(),
                 )?;
             }
+
+            #[cfg(feature = "vic3")]
+            everything.set_vic3_game_version(launcher_game_version.as_deref());
 
             // Print a blank line between the preamble and the first report:
             eprintln!();

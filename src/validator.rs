@@ -515,10 +515,7 @@ impl<'a> Validator<'a> {
         let data = &self.data;
         self.field_check(name, AllowInject::Yes, |_, bv| {
             if let Some(token) = bv.expect_value() {
-                self.data.verify_exists_max_sev(Item::OnAction, token, sev);
-                if let Some(mut action_sc) = sc.root_for_action(token, self.data) {
-                    self.data.on_actions.validate_call(token, data, &mut action_sc);
-                }
+                data.on_actions.validate_reference(token, data, sc, sev);
             }
         })
     }

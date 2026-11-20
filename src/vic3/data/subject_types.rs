@@ -4,6 +4,7 @@ use crate::db::{Db, DbKind};
 use crate::everything::Everything;
 use crate::game::GameFlags;
 use crate::item::{Item, ItemLoader};
+use crate::report::{ErrorKey, err};
 use crate::scopes::Scopes;
 use crate::token::Token;
 use crate::validator::Validator;
@@ -32,7 +33,16 @@ impl DbKind for SubjectType {
         vd.field_bool("use_overlord_ruler");
         vd.field_bool("annex_on_country_formation");
         vd.field_bool("can_start_own_diplomatic_plays");
-        vd.field_bool("breaks_if_subject_not_protected");
+        if data.vic3_at_least_1_15_2() {
+            vd.field_validated_key("breaks_if_subject_not_protected", |key, _bv, _| {
+                err(ErrorKey::Removed)
+                    .msg("Victoria 3 1.15.2 removed the subject type field `breaks_if_subject_not_protected`")
+                    .loc(key)
+                    .push();
+            });
+        } else {
+            vd.field_bool("breaks_if_subject_not_protected");
+        }
         vd.field_bool("join_overlord_wars");
         vd.field_bool("forced_into_overlord_revolution");
         vd.field_bool("can_have_subjects");

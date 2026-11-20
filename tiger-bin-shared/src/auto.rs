@@ -8,20 +8,25 @@ use console::Term;
 use tiger_lib::ModFile;
 #[cfg(any(feature = "vic3", feature = "eu5"))]
 use tiger_lib::ModMetadata;
+#[cfg(feature = "vic3")]
+use tiger_lib::get_version_from_launcher;
 use tiger_lib::{Everything, emit_reports};
 
 use crate::GameConsts;
 use crate::gamedir::{
     find_game_directory_steam, find_paradox_directory, find_workshop_directory_steam,
 };
+#[cfg(feature = "vic3")]
+use crate::version::show_vic3_version_banner;
 
 /// Run the automatic version of the tiger application.
 ///
 /// It can search the paradox mod folder, detect mods and list them for user selection. However,
 /// it has **no** command line arguments and hence less customizable compared to the main application.
 pub fn run(game_consts: &GameConsts) -> Result<()> {
-    let &GameConsts { name, name_short, version, app_id, signature_file, paradox_dir } =
-        game_consts;
+    let &GameConsts { name_short, version, app_id, signature_file, paradox_dir, .. } = game_consts;
+    #[cfg(not(feature = "vic3"))]
+    let name = game_consts.name;
 
     // Colors are off by default, but enable ANSI support in case the config file turns colors on again.
     #[cfg(windows)]
@@ -29,8 +34,11 @@ pub fn run(game_consts: &GameConsts) -> Result<()> {
         eprintln!("Failed to enable ANSI support for Windows10 users. Continuing anyway.")
     });
 
-    eprintln!("This validator was made for {name} version {version}.");
-    eprintln!("If you are using a newer version of {name}, it may be inaccurate.");
+    #[cfg(not(feature = "vic3"))]
+    {
+        eprintln!("This validator was made for {name} version {version}.");
+        eprintln!("If you are using a newer version of {name}, it may be inaccurate.");
+    }
 
     let game = find_game_directory_steam(app_id).context("Cannot find the game directory.")?;
     let workshop = find_workshop_directory_steam(app_id).ok();
@@ -40,6 +48,11 @@ pub fn run(game_consts: &GameConsts) -> Result<()> {
         eprintln!("That does not look like a {name_short} directory.");
         bail!("Cannot find the game directory.");
     }
+
+    #[cfg(feature = "vic3")]
+    let launcher_game_version = get_version_from_launcher(&game).ok();
+    #[cfg(feature = "vic3")]
+    show_vic3_version_banner(version, launcher_game_version.as_deref());
 
     let pdx = get_paradox_directory(&PathBuf::from(paradox_dir))?;
     let pdxmod = pdx.join("mod");
@@ -57,6 +70,8 @@ pub fn run(game_consts: &GameConsts) -> Result<()> {
             Some(&pdx),
             &entries[0].path(),
             &pdxlogs,
+            #[cfg(feature = "vic3")]
+            launcher_game_version.as_deref(),
         )?;
     } else if entries.is_empty() {
         bail!("Did not find any mods to validate.");
@@ -96,6 +111,8 @@ pub fn run(game_consts: &GameConsts) -> Result<()> {
                         Some(&pdx),
                         &entries[modnr].path(),
                         &pdxlogs,
+                        #[cfg(feature = "vic3")]
+                        launcher_game_version.as_deref(),
                     )?;
                     return Ok(());
                 }
@@ -116,6 +133,7 @@ fn validate_mod(
     paradox: Option<&Path>,
     modpath: &Path,
     logdir: &Path,
+    #[cfg(feature = "vic3")] launcher_game_version: Option<&str>,
 ) -> Result<()> {
     let mut everything;
     let mut modpath = modpath;
@@ -158,6 +176,9 @@ fn validate_mod(
             metadata.replace_paths(),
         )?;
     }
+
+    #[cfg(feature = "vic3")]
+    everything.set_vic3_game_version(launcher_game_version);
 
     // Unfortunately have to disable the colors by default because
     // on Windows there's no easy way to view a file that contains those escape sequences.

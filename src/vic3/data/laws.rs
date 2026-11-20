@@ -176,6 +176,7 @@ impl DbKind for LawGroup {
         // undocumented
 
         vd.field_bool("affected_by_regime_change");
+        vd.field_numeric("regime_change_min_progressiveness_difference");
         vd.field_item("linked_social_hierarchy", Item::SocialHierarchy);
         vd.field_numeric("ideological_opinion_impact");
     }

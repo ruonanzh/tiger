@@ -41,8 +41,17 @@ static ON_ACTION_SCOPES_MAP: LazyLock<TigerHashMap<String, OnActionScopeContext>
         })
     });
 
-#[allow(unused_variables)] // only ck3 and hoi4 use `data`
+#[cfg(feature = "vic3")]
+pub(crate) const VIC3_REMOVED_ON_ACTIONS: [&str; 2] =
+    ["on_diplo_play_subject_released", "on_diplo_play_subject_released_overlord"];
+
+#[allow(unused_variables)] // not all games use `data`
 pub fn on_action_scopecontext(key: &Token, data: &Everything) -> Option<ScopeContext> {
+    #[cfg(feature = "vic3")]
+    if data.vic3_at_least_1_15_2() && VIC3_REMOVED_ON_ACTIONS.contains(&key.as_str()) {
+        return None;
+    }
+
     if let Some(oa_sc) = ON_ACTION_SCOPES_MAP.get(key.as_str()) {
         let mut sc = ScopeContext::new(oa_sc.root, key);
         for (name, s) in &oa_sc.names {

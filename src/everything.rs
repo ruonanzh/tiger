@@ -140,6 +140,8 @@ pub struct Everything {
     pub(crate) fileset: Fileset,
 
     #[cfg(feature = "vic3")]
+    vic3_game_version: Option<(u32, u32, u32)>,
+    #[cfg(feature = "vic3")]
     vic3_sound_paths: TigerHashSet<String>,
     #[cfg(feature = "vic3")]
     pub(crate) external_triggers: TigerHashMap<String, PathBuf>,
@@ -548,6 +550,8 @@ impl Everything {
             parser: ParserMemory::default(),
             fileset,
             #[cfg(feature = "vic3")]
+            vic3_game_version: None,
+            #[cfg(feature = "vic3")]
             vic3_sound_paths,
             #[cfg(feature = "vic3")]
             external_triggers,
@@ -900,6 +904,29 @@ impl Everything {
         s.spawn(|_| self.music_hoi4.validate(self));
     }
 
+    /// Set the installed Victoria 3 launcher version before validation. Without a recognized
+    /// version, Victoria 3 checks retain their pre-1.15.2 behavior.
+    #[cfg(feature = "vic3")]
+    pub fn set_vic3_game_version(&mut self, raw_version: Option<&str>) {
+        self.vic3_game_version = raw_version.and_then(|raw| {
+            let mut parts = raw.split('.');
+            let major = parts.next()?.parse().ok()?;
+            let minor = parts.next()?.parse().ok()?;
+            let patch = parts.next()?.parse().ok()?;
+            parts.next().is_none().then_some((major, minor, patch))
+        });
+    }
+
+    #[cfg(feature = "vic3")]
+    pub(crate) fn vic3_version_is_known(&self) -> bool {
+        Game::is_vic3() && self.vic3_game_version.is_some()
+    }
+
+    #[cfg(feature = "vic3")]
+    pub(crate) fn vic3_at_least_1_15_2(&self) -> bool {
+        Game::is_vic3() && self.vic3_game_version.is_some_and(|version| version >= (1, 15, 2))
+    }
+
     pub fn validate_all(&self) {
         scope(|s| {
             self.validate_all_generic(s);
@@ -919,6 +946,10 @@ impl Everything {
         });
         #[cfg(feature = "vic3")]
         self.optional_theme_assets.report();
+        #[cfg(feature = "vic3")]
+        if self.vic3_at_least_1_15_2() {
+            self.on_actions.report_vic3_removed_hooks_for_review();
+        }
         self.localization.validate_pass2(self);
     }
 

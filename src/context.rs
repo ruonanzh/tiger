@@ -82,6 +82,11 @@ pub struct ScopeContext {
     /// A token indicating where this context was created and its named scopes were initialized.
     source: Token,
 
+    /// The enclosing on_action when collecting Vic3 dispatches. A native entry point starts
+    /// without a scripted caller.
+    #[cfg(feature = "vic3")]
+    pub(crate) vic3_on_action_caller: Option<&'static str>,
+
     /// A history of the actions and events that were triggered on the way from `source` to the
     /// current context.
     traceback: Vec<ActionOrEvent>,
@@ -299,6 +304,8 @@ impl ScopeContext {
             effects_display_only: false,
             no_warn: false,
             source: token,
+            #[cfg(feature = "vic3")]
+            vic3_on_action_caller: None,
             traceback: Vec::new(),
         }
     }
@@ -343,6 +350,8 @@ impl ScopeContext {
             effects_display_only: false,
             no_warn: false,
             source: token,
+            #[cfg(feature = "vic3")]
+            vic3_on_action_caller: None,
             traceback: Vec::new(),
         }
     }

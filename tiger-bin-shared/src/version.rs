@@ -1,9 +1,23 @@
 //! Helper functions for handling the game's version compared to tiger's expected game version.
 
+#[cfg(not(feature = "vic3"))]
 use anyhow::Result;
+
+#[cfg(feature = "vic3")]
+pub fn show_vic3_version_banner(baseline: &str, installed: Option<&str>) {
+    eprintln!(
+        "Tiger Victoria 3 baseline: {baseline}; includes selected rule updates through 1.15.2."
+    );
+    if let Some(installed) = installed {
+        eprintln!("Detected Victoria 3 version: {installed}.");
+    } else {
+        eprintln!("Could not detect the installed Victoria 3 version.");
+    }
+}
 
 /// Compare the game version tiger was built for to the detected game version, and warn
 /// on stderr if tiger is too old or the game is too old.
+#[cfg(not(feature = "vic3"))]
 pub fn warn_versions(
     tiger_game: &str,
     tiger_game_version: &str,

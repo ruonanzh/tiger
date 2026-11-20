@@ -1,4 +1,6 @@
 use std::path::PathBuf;
+#[cfg(feature = "vic3")]
+use std::sync::Mutex;
 
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 
@@ -6,17 +8,30 @@ use crate::block::Block;
 use crate::context::ScopeContext;
 use crate::effect::validate_effect;
 use crate::everything::Everything;
+#[cfg(feature = "vic3")]
+use crate::fileset::FileKind;
 use crate::fileset::{FileEntry, FileHandler};
 use crate::game::Game;
 use crate::helpers::TigerHashMap;
+#[cfg(feature = "vic3")]
+use crate::helpers::TigerHashSet;
 use crate::item::Item;
+#[cfg(feature = "vic3")]
+use crate::item::ItemExt;
+#[cfg(feature = "vic3")]
+use crate::on_action::VIC3_REMOVED_ON_ACTIONS;
 use crate::on_action::on_action_scopecontext;
 use crate::parse::ParserMemory;
 use crate::pdxfile::PdxFile;
-#[cfg(feature = "ck3")]
-use crate::report::warn;
+#[cfg(any(feature = "ck3", feature = "vic3", feature = "hoi4"))]
+use crate::report::ErrorKey;
+use crate::report::Severity;
 #[cfg(any(feature = "ck3", feature = "hoi4"))]
-use crate::report::{ErrorKey, err};
+use crate::report::err;
+#[cfg(feature = "vic3")]
+use crate::report::report;
+#[cfg(any(feature = "ck3", feature = "vic3"))]
+use crate::report::warn;
 use crate::scopes::Scopes;
 use crate::token::Token;
 use crate::tooltipped::Tooltipped;
@@ -27,9 +42,14 @@ use crate::validate::validate_modifiers_with_base;
 use crate::validator::Validator;
 use crate::variables::Variables;
 
-#[derive(Clone, Debug, Default)]
+#[cfg(feature = "vic3")]
+type Vic3Dispatches = TigerHashMap<Option<&'static str>, TigerHashSet<&'static str>>;
+
+#[derive(Debug, Default)]
 pub struct OnActions {
     on_actions: TigerHashMap<&'static str, OnAction>,
+    #[cfg(feature = "vic3")]
+    vic3_dispatches: Mutex<Vic3Dispatches>,
 }
 
 impl OnActions {
@@ -39,6 +59,82 @@ impl OnActions {
         } else {
             self.on_actions.insert(key.as_str(), OnAction::new(key, block));
         }
+    }
+
+    pub fn validate_reference(
+        &self,
+        token: &Token,
+        data: &Everything,
+        sc: &ScopeContext,
+        max_sev: Severity,
+    ) {
+        let Some(action) = self.on_actions.get(token.as_str()) else {
+            #[cfg(feature = "vic3")]
+            if data.vic3_at_least_1_15_2() && VIC3_REMOVED_ON_ACTIONS.contains(&token.as_str()) {
+                let item = Item::OnAction;
+                report(ErrorKey::MissingItem, item.severity().at_most(max_sev))
+                    .conf(item.confidence())
+                    .msg(format!("{item} {token} not defined in {}", item.path()))
+                    .info("Victoria 3 1.15.2 removed this engine on_action. An explicit script dispatch requires a loaded custom on_action with this name.")
+                    .loc(token)
+                    .push();
+                return;
+            }
+            data.verify_exists_max_sev(Item::OnAction, token, max_sev);
+            return;
+        };
+
+        #[cfg(feature = "vic3")]
+        if data.vic3_at_least_1_15_2() && !sc.effects_display_only() {
+            self.vic3_dispatches
+                .lock()
+                .unwrap()
+                .entry(sc.vic3_on_action_caller)
+                .or_default()
+                .insert(token.as_str());
+        }
+
+        if let Some(mut action_sc) = sc.root_for_action(token, data) {
+            #[cfg(feature = "vic3")]
+            {
+                action_sc.vic3_on_action_caller = Some(token.as_str());
+            }
+            action.validate_call(data, &mut action_sc);
+        }
+    }
+
+    #[cfg(feature = "vic3")]
+    pub fn report_vic3_removed_hooks_for_review(&self) {
+        // Only calls reachable from an independent script dispatch or a native hook count.
+        // Collect all edges before walking so a private cycle cannot establish reachability.
+        let dispatches = std::mem::take(&mut *self.vic3_dispatches.lock().unwrap());
+        let mut reached = TigerHashSet::default();
+        let mut pending = vec![None];
+        while let Some(caller) = pending.pop() {
+            for &target in dispatches.get(&caller).into_iter().flatten() {
+                if reached.insert(target) {
+                    pending.push(Some(target));
+                }
+            }
+        }
+        let mut definitions = VIC3_REMOVED_ON_ACTIONS
+            .into_iter()
+            .filter(|hook| !reached.contains(hook))
+            .filter_map(|hook| self.on_actions.get(hook))
+            .flat_map(|action| action.actions.iter().map(|(key, _)| key))
+            .filter(|key| key.loc.kind == FileKind::Mod);
+        let Some(first) = definitions.next() else {
+            return;
+        };
+        let mut report = warn(ErrorKey::Removed)
+            .weak()
+            .msg("Review possible dependencies on engine on_actions removed in Victoria 3 1.15.2")
+            .info("Tiger found no recognized explicit dispatch to these definitions from an independent entry point. Check how each is invoked.")
+            .loc_msg(first, first.as_str());
+        for key in definitions {
+            report = report.loc_msg(key, key.as_str());
+        }
+        report.push();
     }
 
     pub fn scan_variables(&self, registry: &mut Variables) {
@@ -62,12 +158,6 @@ impl OnActions {
         self.on_actions.par_iter().for_each(|(_, v)| {
             v.validate(data);
         });
-    }
-
-    pub fn validate_call(&self, key: &Token, data: &Everything, sc: &mut ScopeContext) {
-        if let Some(action) = self.on_actions.get(key.as_str()) {
-            action.validate_call(data, sc);
-        }
     }
 }
 
@@ -148,6 +238,10 @@ impl OnAction {
             } else {
                 let mut generated_sc = ScopeContext::new(Scopes::non_primitive(), key);
                 generated_sc.set_strict_scopes(false);
+                #[cfg(feature = "vic3")]
+                {
+                    generated_sc.vic3_on_action_caller = Some(key.as_str());
+                }
                 generated_sc
             };
             validate_on_action_internal(block, data, &mut sc, &mut seen_trigger, &mut seen_effect);
@@ -290,10 +384,7 @@ fn validate_on_action_internal(
                 vd.multi_field_validated_block_sc("delay", sc, validate_duration);
             }
             for token in vd.values() {
-                data.verify_exists(Item::OnAction, token);
-                if let Some(mut action_sc) = sc.root_for_action(token, data) {
-                    data.on_actions.validate_call(token, data, &mut action_sc);
-                }
+                data.on_actions.validate_reference(token, data, sc, Severity::Error);
             }
             count += 1;
             #[cfg(feature = "ck3")] // Verified: this is only a problem in CK3
@@ -317,10 +408,7 @@ fn validate_on_action_internal(
                 if token.is("0") {
                     continue;
                 }
-                data.verify_exists(Item::OnAction, token);
-                if let Some(mut action_sc) = sc.root_for_action(token, data) {
-                    data.on_actions.validate_call(token, data, &mut action_sc);
-                }
+                data.on_actions.validate_reference(token, data, sc, Severity::Error);
             }
             count += 1;
             #[cfg(feature = "ck3")] // Verified: this is only a problem in CK3
@@ -336,10 +424,7 @@ fn validate_on_action_internal(
         vd.multi_field_validated_key_block("first_valid_on_action", |key, b, data| {
             let mut vd = Validator::new(b, data);
             for token in vd.values() {
-                data.verify_exists(Item::OnAction, token);
-                if let Some(mut action_sc) = sc.root_for_action(token, data) {
-                    data.on_actions.validate_call(token, data, &mut action_sc);
-                }
+                data.on_actions.validate_reference(token, data, sc, Severity::Error);
             }
             count += 1;
             #[cfg(feature = "ck3")] // Verified: this is only a problem in CK3

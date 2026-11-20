@@ -12,8 +12,15 @@ use crate::vic3::tables::misc::STATE_TYPES;
 
 use Effect::*;
 
-pub fn scope_effect(name: &Token, _data: &Everything) -> Option<(Scopes, Effect)> {
+pub fn scope_effect(name: &Token, data: &Everything) -> Option<(Scopes, Effect)> {
     let name_lc = name.as_str().to_ascii_lowercase();
+    if name_lc == "conclude_journal_entry" {
+        return Some(if data.vic3_at_least_1_15_2() {
+            (Scopes::Country, Vb(validate_conclude_journal_entry))
+        } else {
+            (Scopes::all(), Vbv(note_conclude_journal_entry_version))
+        });
+    }
     SCOPE_EFFECT_MAP.get(&*name_lc).copied()
 }
 
