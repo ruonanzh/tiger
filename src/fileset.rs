@@ -408,8 +408,12 @@ impl Fileset {
                 }
             }
         }
-        self.config = Some(config);
+        self.set_config(config);
         Ok(())
+    }
+
+    pub fn set_config(&mut self, config: Block) {
+        self.config = Some(config);
     }
 
     fn should_replace(&self, path: &Path, kind: FileKind) -> bool {

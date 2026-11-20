@@ -14,28 +14,10 @@ fn validates_fixed_contracts_and_keeps_coverage_advisory() {
     Game::set(Game::Vic3).unwrap();
     let fixture = tempfile::tempdir().unwrap();
     let root = fixture.path();
-    let workshop = root.join("workshop");
     write(
         root,
         "common/modifier_type_definitions/unit_probe.txt",
         "unit_offense_add = {} battle_casualties_mult = {}",
-    );
-    write(
-        &workshop,
-        "4100000000/common/scripted_triggers/addon.txt",
-        "third_party_rule = { nested_candidate = {} invalid_external_body = yes }
-# commented_candidate = {}",
-    );
-    write(
-        root,
-        "common/scripted_triggers/probe.txt",
-        "provider_probe = {
-    third_party_rule = { ANY = 5 }
-    third_party_rule = { lowercase = 5 }
-    nested_candidate = yes
-    commented_candidate = yes
-    missing_required_rule = yes
-}",
     );
 
     write(
@@ -249,7 +231,7 @@ option = {{ name = fixture_title }}
         ));
     }
 
-    let mut data = Everything::new(None, None, Some(&workshop), None, root, Vec::new()).unwrap();
+    let mut data = Everything::new(None, None, None, None, root, Vec::new()).unwrap();
     data.load_all();
     data.validate_all();
     let reports = take_reports();
@@ -276,10 +258,6 @@ option = {{ name = fixture_title }}
         ("wrong-use", "is an effect, and can't be used in a trigger", Severity::Error),
         ("wrong-use", "cannot be used as a script value operation", Severity::Error),
         ("unknown-field", "unresolved_external_macro", Severity::Error),
-        ("unknown-field", "external scripted trigger `third_party_rule`", Severity::Tips),
-        ("unknown-field", "commented_candidate", Severity::Error),
-        ("unknown-field", "nested_candidate", Severity::Error),
-        ("unknown-field", "missing_required_rule", Severity::Error),
         ("unknown-field", "unresolved_compatibility_key", Severity::Error),
         ("wrong-use", "has_variable", Severity::Error),
         ("unknown-field", "make_indepedent", Severity::Error),
@@ -299,7 +277,6 @@ option = {{ name = fixture_title }}
         ("missing-item", "production method pm_present"),
         ("missing-item", "event probe.1"),
         ("unknown-field", "make_independent"),
-        ("unknown-field", "invalid_external_body"),
         ("unknown-field", "is_diplomatic_play_committed_participant"),
     ] {
         assert!(

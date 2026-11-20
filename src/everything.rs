@@ -61,8 +61,6 @@ use crate::eu5::tables::misc::*;
 use crate::fileset::{FileEntry, FileKind, FileStage, Fileset};
 use crate::game::Game;
 #[cfg(any(feature = "ck3", feature = "vic3"))]
-#[cfg(feature = "vic3")]
-use crate::helpers::TigerHashMap;
 use crate::helpers::TigerHashSet;
 #[cfg(feature = "hoi4")]
 use crate::hoi4::data::{
@@ -143,8 +141,6 @@ pub struct Everything {
     vic3_game_version: Option<(u32, u32, u32)>,
     #[cfg(feature = "vic3")]
     vic3_sound_paths: TigerHashSet<String>,
-    #[cfg(feature = "vic3")]
-    pub(crate) external_triggers: TigerHashMap<String, PathBuf>,
 
     /// Tracks specifically the .dds files, and their formats and sizes.
     pub(crate) dds: DdsFiles,
@@ -440,6 +436,33 @@ impl Everything {
         mod_root: &Path,
         replace_paths: Vec<PathBuf>,
     ) -> Result<Self> {
+        Self::new_with_config(
+            config_filepath,
+            vanilla_dir,
+            Some((workshop_dir, paradox_dir)),
+            mod_root,
+            replace_paths,
+        )
+    }
+
+    /// Validate the base game and one mod while ignoring secondary mods in the config.
+    #[cfg(feature = "vic3")]
+    pub fn new_single_mod(
+        config_filepath: Option<&Path>,
+        vanilla_dir: Option<&Path>,
+        mod_root: &Path,
+        replace_paths: Vec<PathBuf>,
+    ) -> Result<Self> {
+        Self::new_with_config(config_filepath, vanilla_dir, None, mod_root, replace_paths)
+    }
+
+    fn new_with_config(
+        config_filepath: Option<&Path>,
+        vanilla_dir: Option<&Path>,
+        secondary_mod_dirs: Option<(Option<&Path>, Option<&Path>)>,
+        mod_root: &Path,
+        replace_paths: Vec<PathBuf>,
+    ) -> Result<Self> {
         let mut fileset = Fileset::new(vanilla_dir, mod_root.to_path_buf(), replace_paths);
 
         let config_file_name = match Game::game() {
@@ -472,7 +495,11 @@ impl Everything {
             ))
         };
 
-        fileset.config(config.clone(), workshop_dir, paradox_dir)?;
+        if let Some((workshop_dir, paradox_dir)) = secondary_mod_dirs {
+            fileset.config(config.clone(), workshop_dir, paradox_dir)?;
+        } else {
+            fileset.set_config(config.clone());
+        }
 
         fileset.scan_all()?;
         fileset.finalize();
@@ -534,18 +561,6 @@ impl Everything {
             TigerHashSet::default()
         };
 
-        #[cfg(feature = "vic3")]
-        let external_triggers = workshop_dir.filter(|_| Game::is_vic3()).map_or_else(
-            TigerHashMap::default,
-            |workshop| {
-                crate::vic3::data::external_triggers::index(
-                    workshop,
-                    mod_root,
-                    &fileset.loaded_mods,
-                )
-            },
-        );
-
         Ok(Everything {
             parser: ParserMemory::default(),
             fileset,
@@ -553,8 +568,7 @@ impl Everything {
             vic3_game_version: None,
             #[cfg(feature = "vic3")]
             vic3_sound_paths,
-            #[cfg(feature = "vic3")]
-            external_triggers,
+
             dds: DdsFiles::default(),
             config,
             #[cfg(any(feature = "ck3", feature = "vic3"))]

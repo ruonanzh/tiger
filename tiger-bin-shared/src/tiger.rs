@@ -60,6 +60,10 @@ struct ValidateArgs {
     #[cfg_attr(any(feature = "vic3", feature = "eu5"), clap(long))]
     /// Path to game workshop directory.
     workshop: Option<PathBuf>,
+    /// Validate only this mod and the base game, ignoring secondary mods in the config.
+    #[cfg(feature = "vic3")]
+    #[clap(long)]
+    single_mod: bool,
     #[cfg_attr(not(any(feature = "ck3", feature = "imperator", feature = "hoi4")), clap(skip))]
     #[cfg_attr(any(feature = "ck3", feature = "imperator", feature = "hoi4"), clap(long))]
     /// Path to paradox directory
@@ -140,10 +144,14 @@ pub fn run(
             if args.game.is_none() {
                 args.game = find_game_directory_steam(app_id).ok();
             }
-            if args.workshop.is_none() {
+            #[cfg(feature = "vic3")]
+            let load_secondary_mods = !args.single_mod;
+            #[cfg(not(feature = "vic3"))]
+            let load_secondary_mods = true;
+            if load_secondary_mods && args.workshop.is_none() {
                 args.workshop = find_workshop_directory_steam(app_id).ok();
             }
-            if args.paradox.is_none() {
+            if load_secondary_mods && args.paradox.is_none() {
                 args.paradox = find_paradox_directory(&PathBuf::from(paradox_dir));
             }
             if let Some(ref mut game) = args.game {
@@ -253,14 +261,23 @@ pub fn run(
                 let metadata = ModMetadata::read(&args.modpath)?;
                 eprintln!("Using mod directory: {}", metadata.modpath().display());
 
-                everything = Everything::new(
-                    args.config.as_deref(),
-                    args.game.as_deref(),
-                    args.workshop.as_deref(),
-                    args.paradox.as_deref(),
-                    &args.modpath,
-                    metadata.replace_paths(),
-                )?;
+                everything = match load_secondary_mods {
+                    #[cfg(feature = "vic3")]
+                    false => Everything::new_single_mod(
+                        args.config.as_deref(),
+                        args.game.as_deref(),
+                        &args.modpath,
+                        metadata.replace_paths(),
+                    )?,
+                    _ => Everything::new(
+                        args.config.as_deref(),
+                        args.game.as_deref(),
+                        args.workshop.as_deref(),
+                        args.paradox.as_deref(),
+                        &args.modpath,
+                        metadata.replace_paths(),
+                    )?,
+                };
             }
 
             #[cfg(feature = "vic3")]

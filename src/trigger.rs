@@ -632,24 +632,7 @@ pub fn validate_trigger_key_bv(
                     return side_effects;
                 } else {
                     let msg = format!("unknown token `{part}`");
-                    #[cfg(feature = "vic3")]
-                    if Game::is_vic3()
-                        && part_flags.contains(PartFlags::First | PartFlags::Last)
-                        && let Some(candidate) = data.external_triggers.get(part.as_str())
-                    {
-                        tips(ErrorKey::UnknownField)
-                            .msg(format!(
-                                "external scripted trigger `{part}` has no active definition"
-                            ))
-                            .info(format!(
-                                "Workshop candidate: {}. Check whether it is required by this mod.",
-                                candidate.display()
-                            ))
-                            .loc(part)
-                            .push();
-                        sc.close();
-                        return side_effects;
-                    }
+
                     err(ErrorKey::UnknownField).msg(msg).loc(part).push();
                     sc.close();
                     return side_effects;
