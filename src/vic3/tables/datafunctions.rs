@@ -55,13 +55,20 @@ pub static GLOBAL_PROMOTES_MAP: LazyLock<TigerHashMap<&'static str, (Args, Datat
     });
 
 pub static GLOBAL_FUNCTIONS_MAP: LazyLock<TigerHashMap<&'static str, (Args, Datatype)>> =
-    LazyLock::new(|| {
-        let mut map = TigerHashMap::default();
-        for (name, args, datatype) in GLOBAL_FUNCTIONS_VIC3.iter().copied() {
-            map.insert(name, (args, datatype));
-        }
-        map
-    });
+    LazyLock::new(|| global_functions_map(&[]));
+
+pub static GLOBAL_FUNCTIONS_MAP_1_15_2: LazyLock<TigerHashMap<&'static str, (Args, Datatype)>> =
+    LazyLock::new(|| global_functions_map(GLOBAL_FUNCTIONS_VIC3_1_15_2));
+
+fn global_functions_map(
+    additional: &[(&'static str, Args, Datatype)],
+) -> TigerHashMap<&'static str, (Args, Datatype)> {
+    GLOBAL_FUNCTIONS_VIC3
+        .iter()
+        .chain(additional)
+        .map(|&(name, args, datatype)| (name, (args, datatype)))
+        .collect()
+}
 
 #[allow(clippy::type_complexity)]
 pub static PROMOTES_MAP: LazyLock<TigerHashMap<&'static str, Vec<(Datatype, Args, Datatype)>>> =
@@ -73,14 +80,28 @@ pub static PROMOTES_MAP: LazyLock<TigerHashMap<&'static str, Vec<(Datatype, Args
         map
     });
 
-#[allow(clippy::type_complexity)]
-pub static FUNCTIONS_MAP: LazyLock<TigerHashMap<&'static str, Vec<(Datatype, Args, Datatype)>>> =
+type FunctionsMap = TigerHashMap<&'static str, Vec<(Datatype, Args, Datatype)>>;
+
+pub static FUNCTIONS_MAP: LazyLock<FunctionsMap> = LazyLock::new(|| functions_map(&[]));
+
+pub static FUNCTIONS_MAP_1_15_2: LazyLock<FunctionsMap> =
+    LazyLock::new(|| functions_map(FUNCTIONS_VIC3_1_15_2));
+
+fn functions_map(additional: &[(&'static str, Datatype, Args, Datatype)]) -> FunctionsMap {
+    let mut map = FunctionsMap::default();
+    for (name, from, args, to) in FUNCTIONS_VIC3.iter().chain(additional).copied() {
+        map.entry(name).or_default().push((from, args, to));
+    }
+    map
+}
+
+pub static LOWERCASE_DATATYPE_SET_1_15_2: LazyLock<TigerHashSet<CaseInsensitiveStr>> =
     LazyLock::new(|| {
-        let mut map = TigerHashMap::<&'static str, Vec<(Datatype, Args, Datatype)>>::default();
-        for (name, from, args, to) in FUNCTIONS_VIC3.iter().copied() {
-            map.entry(name).or_default().push((from, args, to));
-        }
-        map
+        GLOBAL_FUNCTIONS_VIC3_1_15_2
+            .iter()
+            .map(|&(name, _, _)| CaseInsensitiveStr(name))
+            .chain(FUNCTIONS_VIC3_1_15_2.iter().map(|&(name, _, _, _)| CaseInsensitiveStr(name)))
+            .collect()
     });
 
 // TODO: find the right datatypes for the commented out ones

@@ -269,9 +269,9 @@ pub fn validate_datatypes(
             return Datatype::Unknown;
         }
 
-        let lookup_gf = lookup_global_function(code.name.as_str());
+        let lookup_gf = lookup_global_function(code.name.as_str(), data);
         let lookup_gp = lookup_global_promote(code.name.as_str());
-        let lookup_f = lookup_function(code.name.as_str(), curtype);
+        let lookup_f = lookup_function(code.name.as_str(), curtype, data);
         let lookup_p = lookup_promote(code.name.as_str(), curtype);
 
         let gf_found = lookup_gf.is_some();
@@ -305,7 +305,13 @@ pub fn validate_datatypes(
                 LookupResult::WrongType => {
                     let msg = format!("{} cannot follow a {curtype} promote", code.name);
                     if Game::is_vic3() && matches!(curtype, Datatype::Scope | Datatype::TopScope) {
-                        let lookup = if is_promote { lookup_promote } else { lookup_function };
+                        let lookup = |name, datatype| {
+                            if is_promote {
+                                lookup_promote(name, datatype)
+                            } else {
+                                lookup_function(name, datatype, data)
+                            }
+                        };
                         if let LookupResult::Found(xargs, xrtype) =
                             lookup(code.name.as_str(), Datatype::Unknown)
                         {
@@ -590,7 +596,7 @@ pub fn validate_datatypes(
                     .info("Check the receiver type supplied at runtime")
                     .loc(&code.name)
                     .push();
-            } else if let Some(alternative) = lookup_alternative(code.name.as_str()) {
+            } else if let Some(alternative) = lookup_alternative(code.name.as_str(), data) {
                 let info = format!("did you mean {alternative}?");
                 warn(ErrorKey::Datafunctions).msg(msg).info(info).loc(&code.name).push();
             } else if Game::is_vic3()
@@ -921,10 +927,17 @@ fn lookup_global_promote(lookup_name: &str) -> Option<(Args, Datatype)> {
     None
 }
 
-fn lookup_global_function(lookup_name: &str) -> Option<(Args, Datatype)> {
+fn lookup_global_function(
+    lookup_name: &str,
+    #[cfg_attr(not(feature = "vic3"), allow(unused_variables))] data: &Everything,
+) -> Option<(Args, Datatype)> {
     let global_functions_map = match Game::game() {
         #[cfg(feature = "ck3")]
         Game::Ck3 => &crate::ck3::tables::datafunctions::GLOBAL_FUNCTIONS_MAP,
+        #[cfg(feature = "vic3")]
+        Game::Vic3 if data.vic3_at_least_1_15_2() => {
+            &crate::vic3::tables::datafunctions::GLOBAL_FUNCTIONS_MAP_1_15_2
+        }
         #[cfg(feature = "vic3")]
         Game::Vic3 => &crate::vic3::tables::datafunctions::GLOBAL_FUNCTIONS_MAP,
         #[cfg(feature = "imperator")]
@@ -986,10 +999,18 @@ fn lookup_promote(lookup_name: &str, ltype: Datatype) -> LookupResult {
         .map_or(LookupResult::NotFound, |x| lookup_promote_or_function(ltype, x))
 }
 
-fn lookup_function(lookup_name: &str, ltype: Datatype) -> LookupResult {
+fn lookup_function(
+    lookup_name: &str,
+    ltype: Datatype,
+    #[cfg_attr(not(feature = "vic3"), allow(unused_variables))] data: &Everything,
+) -> LookupResult {
     let functions_map = match Game::game() {
         #[cfg(feature = "ck3")]
         Game::Ck3 => &crate::ck3::tables::datafunctions::FUNCTIONS_MAP,
+        #[cfg(feature = "vic3")]
+        Game::Vic3 if data.vic3_at_least_1_15_2() => {
+            &crate::vic3::tables::datafunctions::FUNCTIONS_MAP_1_15_2
+        }
         #[cfg(feature = "vic3")]
         Game::Vic3 => &crate::vic3::tables::datafunctions::FUNCTIONS_MAP,
         #[cfg(feature = "imperator")]
@@ -1025,7 +1046,17 @@ impl std::hash::Hash for CaseInsensitiveStr {
 /// This is a fairly expensive lookup.
 /// Currently it only looks for different-case variants.
 // TODO: make it consider misspellings as well
-fn lookup_alternative(lookup_name: &'static str) -> Option<&'static str> {
+fn lookup_alternative(
+    lookup_name: &'static str,
+    #[cfg_attr(not(feature = "vic3"), allow(unused_variables))] data: &Everything,
+) -> Option<&'static str> {
+    #[cfg(feature = "vic3")]
+    if data.vic3_at_least_1_15_2()
+        && let Some(name) = crate::vic3::tables::datafunctions::LOWERCASE_DATATYPE_SET_1_15_2
+            .get(&CaseInsensitiveStr(lookup_name))
+    {
+        return Some(name.0);
+    }
     let lowercase_datatype_set = match Game::game() {
         #[cfg(feature = "ck3")]
         Game::Ck3 => &crate::ck3::tables::datafunctions::LOWERCASE_DATATYPE_SET,
