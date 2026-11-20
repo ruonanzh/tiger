@@ -3,7 +3,7 @@ use crate::db::{Db, DbKind};
 use crate::everything::Everything;
 use crate::game::GameFlags;
 use crate::item::{Item, ItemLoader};
-use crate::report::{ErrorKey, warn};
+use crate::report::{ErrorKey, tips, warn};
 use crate::token::Token;
 use crate::validator::Validator;
 
@@ -83,9 +83,27 @@ impl DbKind for GameRule {
             data.verify_exists_implied(Item::Localization, &loca, key);
 
             vd.multi_field_validated_value("flag", |_, mut vd| {
-                vd.maybe_prefix_item("disable_", Item::ProductionMethod);
-                vd.maybe_prefix_item("force_", Item::ProductionMethod);
-                vd.choice(SIMPLE_GAME_RULE_FLAGS);
+                if vd.maybe_prefix_item("disable_", Item::ProductionMethod)
+                    || vd.maybe_prefix_item("force_", Item::ProductionMethod)
+                {
+                    return;
+                }
+                let flag = vd.value();
+                if flag.is(key.as_str())
+                    && !SIMPLE_GAME_RULE_FLAGS.contains(&flag.as_str())
+                    && !flag.starts_with("disable_")
+                    && !flag.starts_with("force_")
+                {
+                    tips(ErrorKey::Choice)
+                        .weak()
+                        .msg("game-rule flag matching its setting name needs runtime review")
+                        .info("The setting can be referenced with `has_game_rule`. Check at runtime whether the game uses this flag.")
+                        .loc(flag)
+                        .push();
+                    vd.accept();
+                } else {
+                    vd.choice(SIMPLE_GAME_RULE_FLAGS);
+                }
             });
         });
     }

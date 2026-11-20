@@ -1139,13 +1139,22 @@ fn match_trigger_bv(
                 if let Some(token) = bv.expect_value() {
                     let multipart = token.as_str().contains('.');
                     if token.is("yes") || token.is("no") {
-                        let msg = "`exists = yes/no` does not work";
-                        let info = if token.is("yes") {
-                            "try `exists = this`"
+                        if Game::is_vic3() {
+                            tips(ErrorKey::Scopes)
+                                .weak()
+                                .msg("`exists = yes/no` needs runtime review")
+                                .info("Victoria 3 uses this form in stock scripts. Check how it behaves in this scope.")
+                                .loc(token)
+                                .push();
                         } else {
-                            "try `NOT = { exists = this }`"
-                        };
-                        warn(ErrorKey::Scopes).msg(msg).info(info).loc(token).push();
+                            let msg = "`exists = yes/no` does not work";
+                            let info = if token.is("yes") {
+                                "try `exists = this`"
+                            } else {
+                                "try `NOT = { exists = this }`"
+                            };
+                            warn(ErrorKey::Scopes).msg(msg).info(info).loc(token).push();
+                        }
                     } else if token.starts_with("scope:") && !multipart {
                         // exists = scope:name is used to check if that scope name was set
                         if !negated {

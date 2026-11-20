@@ -583,7 +583,14 @@ pub fn validate_datatypes(
         if !found {
             // TODO: If there is a Custom of the same name, suggest that
             let msg = format!("unknown datafunction {}", &code.name);
-            if let Some(alternative) = lookup_alternative(code.name.as_str()) {
+            if Game::is_vic3() && !is_first && curtype == Datatype::Unknown {
+                tips(ErrorKey::Datafunctions)
+                    .weak()
+                    .msg(msg)
+                    .info("Check the receiver type supplied at runtime")
+                    .loc(&code.name)
+                    .push();
+            } else if let Some(alternative) = lookup_alternative(code.name.as_str()) {
                 let info = format!("did you mean {alternative}?");
                 warn(ErrorKey::Datafunctions).msg(msg).info(info).loc(&code.name).push();
             } else if Game::is_vic3()
